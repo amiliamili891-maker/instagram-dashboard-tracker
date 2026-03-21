@@ -69,7 +69,7 @@ function buildSyncDeps(env: ReturnType<typeof getServerEnv>, syncType: SyncType,
   const ghstlySyncFn = async () => {
     const { syncGhstlyIncremental, syncGhstlyBackfill } = await import('@/lib/sync/ghstly-sync');
     const { GhstlyClient } = await import('@/lib/api/ghstly-client');
-    const client = new GhstlyClient({ baseUrl: 'https://ghstly.chat/api/partner', apiKey: env.ghstlyPartnerApiKey });
+    const client = GhstlyClient.fromEnv();
     const ghstlyPersistence = {
       async upsertDailyGhstlyStats(rows: unknown[]) {
         if ((rows as unknown[]).length === 0) return;

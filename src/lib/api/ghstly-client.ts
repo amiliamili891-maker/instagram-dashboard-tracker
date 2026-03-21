@@ -86,8 +86,9 @@ export class GhstlyClient {
     if (!apiKey) {
       throw new Error('Missing required environment variable: GHSTLY_PARTNER_API_KEY');
     }
+    const baseUrl = process.env.GHSTLY_PARTNER_API_URL?.trim() || 'http://148.251.46.108:8400/api/partner';
     return new GhstlyClient({
-      baseUrl: 'https://ghstly.chat/api/partner',
+      baseUrl,
       apiKey,
     });
   }
