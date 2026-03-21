@@ -317,7 +317,9 @@ describe('transformDailyStatsRow', () => {
     };
     const row = transformDailyStatsRow(input, TEST_BATCH_ID);
 
-    expect(row.date).toBe('2026-03-21');
+    expect(row.report_date).toBe('2026-03-21');
+    expect(row.entity_level).toBe('ad');
+    expect(row.entity_id).toBe('120244038423210528');
     expect(row.campaign_id).toBe('120244033805690528');
     expect(row.adset_id).toBe('120244038423200528');
     expect(row.ad_id).toBe('120244038423210528');

@@ -74,7 +74,7 @@ function buildSyncDeps(env: ReturnType<typeof getServerEnv>, syncType: SyncType,
         if ((rows as unknown[]).length === 0) return;
         const { error } = await serviceClient
           .from('daily_ghstly_stats')
-          .upsert(rows as Record<string, unknown>[], { onConflict: 'date,ad_id', ignoreDuplicates: false });
+          .upsert(rows as Record<string, unknown>[], { onConflict: 'report_date,entity_level,entity_id', ignoreDuplicates: false });
         if (error) throw new Error(`Failed to upsert daily_ghstly_stats: ${error.message}`);
       },
       async upsertSessions(rows: unknown[]) {

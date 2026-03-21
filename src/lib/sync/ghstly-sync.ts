@@ -33,7 +33,9 @@ import type { GhstlyClient } from '@/lib/api/ghstly-client';
 
 /** A daily stats row ready for database upsert */
 export interface DailyGhstlyStatsRow {
-  date: string;
+  report_date: string;
+  entity_level: 'campaign' | 'adset' | 'ad';
+  entity_id: string;
   campaign_id: string | null;
   adset_id: string | null;
   ad_id: string | null;
@@ -137,8 +139,15 @@ export function transformDailyStatsRow(
     ad_id: row.ad_id,
   });
 
+  // Determine entity level and ID from the available IDs
+  const entityLevel: 'campaign' | 'adset' | 'ad' =
+    row.ad_id ? 'ad' : row.adset_id ? 'adset' : 'campaign';
+  const entityId = row.ad_id ?? row.adset_id ?? row.campaign_id ?? '';
+
   return {
-    date: row.date,
+    report_date: row.date,
+    entity_level: entityLevel,
+    entity_id: entityId,
     campaign_id: row.campaign_id,
     adset_id: row.adset_id,
     ad_id: row.ad_id,
