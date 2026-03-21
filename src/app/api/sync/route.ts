@@ -6,6 +6,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { timingSafeEqual } from 'crypto';
 import { getServerEnv } from '@/lib/env';
 import { isAdminEmail } from '@/lib/auth/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
@@ -110,7 +111,9 @@ export async function GET(request: Request) {
     return Response.json({ error: 'Server misconfiguration' }, { status: 500 });
   }
 
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  const expected = Buffer.from(`Bearer ${cronSecret}`);
+  const received = Buffer.from(authHeader ?? '');
+  if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -150,7 +153,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     if (body.type === 'backfill') syncType = 'backfill';
-    if (typeof body.backfillDays === 'number') backfillDays = body.backfillDays;
+    if (typeof body.backfillDays === 'number') backfillDays = Math.min(Math.max(body.backfillDays, 1), 90);
   } catch {
     // No body or invalid JSON — use defaults
   }

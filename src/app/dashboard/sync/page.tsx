@@ -10,6 +10,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { getServerEnv } from '@/lib/env';
 import { computeFreshness, type SyncLogRow } from '@/lib/sync/freshness';
+import { SyncNowButton } from '@/components/sync-now-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,7 +96,10 @@ export default async function SyncHistoryPage() {
   return (
     <section className="sync-history">
       <header className="sync-header">
-        <h1>Sync History</h1>
+        <div className="sync-header-top">
+          <h1>Sync History</h1>
+          <SyncNowButton />
+        </div>
         <div className="freshness-info">
           <FreshnessBadge state={freshness.state} />
           <span className="data-as-of">
