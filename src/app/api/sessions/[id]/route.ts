@@ -1,0 +1,69 @@
+/**
+ * GET /api/sessions/[id]
+ *
+ * Returns a single session with full metadata.
+ */
+
+import { type NextRequest } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { getServerEnv } from '@/lib/env';
+import { requireAdminUser } from '@/lib/auth/guards';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    await requireAdminUser();
+  } catch {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  if (!id) {
+    return Response.json({ error: 'Missing session ID' }, { status: 400 });
+  }
+
+  try {
+    const env = getServerEnv();
+    const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return Response.json({ error: 'Session not found' }, { status: 404 });
+      }
+      console.error('Failed to fetch session:', error.message);
+      return Response.json({ error: 'Failed to fetch session' }, { status: 500 });
+    }
+
+    // Compute duration if both timestamps exist
+    let durationMs: number | null = null;
+    if (data.started_at_utc && data.ended_at_utc) {
+      durationMs = new Date(data.ended_at_utc).getTime() - new Date(data.started_at_utc).getTime();
+    }
+
+    // Strip source_payload to avoid leaking raw data (may contain PII hash etc.)
+    const { source_payload: _sp, ...sessionData } = data;
+
+    return Response.json({
+      data: {
+        ...sessionData,
+        duration_ms: durationMs,
+      },
+    });
+  } catch (err) {
+    console.error('Session detail API error:', err);
+    return Response.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

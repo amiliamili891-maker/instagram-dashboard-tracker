@@ -1,0 +1,124 @@
+/**
+ * GET /api/stats/combined
+ *
+ * Returns combined Meta + Ghstly data from daily_combined_stats.
+ *
+ * Query params:
+ *   - level: 'campaign' | 'adset' | 'ad' (required)
+ *   - date_from: ISO date string (required)
+ *   - date_to: ISO date string (required)
+ *   - campaign_id: filter by campaign (optional)
+ *   - adset_id: filter by adset (optional)
+ *   - ad_id: filter by ad (optional)
+ */
+
+import { type NextRequest } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { getServerEnv } from '@/lib/env';
+import { requireAdminUser } from '@/lib/auth/guards';
+
+export async function GET(request: NextRequest) {
+  // Auth check
+  try {
+    await requireAdminUser();
+  } catch {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const searchParams = request.nextUrl.searchParams;
+  const level = searchParams.get('level');
+  const dateFrom = searchParams.get('date_from');
+  const dateTo = searchParams.get('date_to');
+  const campaignId = searchParams.get('campaign_id');
+  const adsetId = searchParams.get('adset_id');
+  const adId = searchParams.get('ad_id');
+
+  // Validate required params
+  if (!level || !['campaign', 'adset', 'ad'].includes(level)) {
+    return Response.json(
+      { error: 'Invalid or missing "level" param. Must be campaign, adset, or ad.' },
+      { status: 400 },
+    );
+  }
+
+  if (!dateFrom || !dateTo) {
+    return Response.json(
+      { error: 'Missing required "date_from" and "date_to" params.' },
+      { status: 400 },
+    );
+  }
+
+  // Validate date format
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(dateFrom) || !dateRegex.test(dateTo)) {
+    return Response.json(
+      { error: 'Invalid date format. Use YYYY-MM-DD.' },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const env = getServerEnv();
+    const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    let query = supabase
+      .from('daily_combined_stats')
+      .select('*')
+      .eq('entity_level', level)
+      .gte('report_date', dateFrom)
+      .lte('report_date', dateTo)
+      .order('report_date', { ascending: false });
+
+    // Apply optional entity filters
+    if (campaignId) {
+      // For campaign level, filter by entity_id directly
+      if (level === 'campaign') {
+        query = query.eq('entity_id', campaignId);
+      }
+      // For lower levels, we need to join or filter differently
+      // Since combined stats stores entity_id (which is campaign_id at campaign level,
+      // adset_id at adset level, ad_id at ad level), we need a different approach.
+      // We'll rely on the caller passing the right entity filter for the right level.
+    }
+
+    if (adsetId) {
+      if (level === 'adset') {
+        query = query.eq('entity_id', adsetId);
+      }
+    }
+
+    if (adId) {
+      if (level === 'ad') {
+        query = query.eq('entity_id', adId);
+      }
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Failed to fetch combined stats:', error.message);
+      return Response.json(
+        { error: 'Failed to fetch combined stats' },
+        { status: 500 },
+      );
+    }
+
+    return Response.json({
+      data: data ?? [],
+      meta: {
+        level,
+        date_from: dateFrom,
+        date_to: dateTo,
+        count: data?.length ?? 0,
+      },
+    });
+  } catch (err) {
+    console.error('Combined stats API error:', err);
+    return Response.json(
+      { error: 'Internal server error' },
+      { status: 500 },
+    );
+  }
+}
