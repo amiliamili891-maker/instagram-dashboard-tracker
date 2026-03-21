@@ -334,9 +334,17 @@ async function executeSyncForDateRange(
       date_to: dateTo,
     });
 
-    dailyStatsRows = dailyResponse.items.map((row) =>
+    const allRows = dailyResponse.items.map((row) =>
       transformDailyStatsRow(row, syncBatchId),
     );
+
+    // Deduplicate: Postgres ON CONFLICT can't handle the same key twice in one batch.
+    // Keep the last occurrence per (report_date, entity_level, entity_id).
+    const deduped = new Map<string, DailyGhstlyStatsRow>();
+    for (const row of allRows) {
+      deduped.set(`${row.report_date}|${row.entity_level}|${row.entity_id}`, row);
+    }
+    dailyStatsRows = Array.from(deduped.values());
 
     await persistence.upsertDailyGhstlyStats(dailyStatsRows);
 
