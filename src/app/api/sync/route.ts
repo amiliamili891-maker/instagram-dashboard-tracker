@@ -67,9 +67,11 @@ function buildSyncDeps(env: ReturnType<typeof getServerEnv>, syncType: SyncType,
   };
 
   const ghstlySyncFn = async () => {
+    console.log('[ghstly-sync] Starting Ghstly sync...');
     const { syncGhstlyIncremental, syncGhstlyBackfill } = await import('@/lib/sync/ghstly-sync');
     const { GhstlyClient } = await import('@/lib/api/ghstly-client');
     const client = GhstlyClient.fromEnv();
+    console.log(`[ghstly-sync] Client created with base URL: ${process.env.GHSTLY_PARTNER_API_URL || 'default (148.251.46.108:8400)'}`);
     const ghstlyPersistence = {
       async upsertDailyGhstlyStats(rows: unknown[]) {
         if ((rows as unknown[]).length === 0) return;
@@ -90,10 +92,16 @@ function buildSyncDeps(env: ReturnType<typeof getServerEnv>, syncType: SyncType,
         if (error) console.error('Failed to insert ghstly sync_log:', error.message);
       },
     };
-    const result = syncType === 'backfill'
-      ? await syncGhstlyBackfill(client, ghstlyPersistence, backfillDays)
-      : await syncGhstlyIncremental(client, ghstlyPersistence);
-    return { recordsSynced: result.dailyStatsRows.length + result.sessionRows.length };
+    try {
+      const result = syncType === 'backfill'
+        ? await syncGhstlyBackfill(client, ghstlyPersistence, backfillDays)
+        : await syncGhstlyIncremental(client, ghstlyPersistence);
+      console.log(`[ghstly-sync] Success: ${result.dailyStatsRows.length} stats rows, ${result.sessionRows.length} session rows`);
+      return { recordsSynced: result.dailyStatsRows.length + result.sessionRows.length };
+    } catch (err) {
+      console.error('[ghstly-sync] Failed:', err);
+      throw err;
+    }
   };
 
   return { persistence, metaSyncFn, ghstlySyncFn, serviceClient };
