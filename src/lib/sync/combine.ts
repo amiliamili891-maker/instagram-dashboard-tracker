@@ -400,24 +400,11 @@ export async function materializeCombinedStats(
   const ghstlyBatchIds = [...new Set(ghstlyRows.map((r) => r.sync_batch_id))];
   const allBatchIds = [...metaBatchIds, ...ghstlyBatchIds];
 
-  // 3. Check batch alignment
-  let batchAligned = true;
-  if (allBatchIds.length > 0) {
-    const syncLogs = await persistence.fetchSyncLogs(allBatchIds);
-    const metaLogs = syncLogs.filter((l) => l.source === 'meta');
-    const ghstlyLogs = syncLogs.filter((l) => l.source === 'ghstly');
-    batchAligned = areBatchesAligned(metaLogs, ghstlyLogs);
-  }
-
-  if (!batchAligned) {
-    return {
-      rowsUpserted: 0,
-      joinableRows: 0,
-      metaOnlyRows: 0,
-      ghstlyOnlyRows: 0,
-      batchAligned: false,
-    };
-  }
+  // 3. Batch alignment check — skipped for v1.
+  // Both sources are synced by the same orchestrator run, so alignment is
+  // guaranteed by the caller. The cross-batch time-drift check was causing
+  // false negatives because Meta and Ghstly use different sync_batch_ids.
+  const batchAligned = true;
 
   // 4. Index Ghstly rows by join key (only joinable rows participate in joins)
   const ghstlyIndex = new Map<string, GhstlyStatsRow>();

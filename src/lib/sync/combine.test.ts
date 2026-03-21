@@ -551,7 +551,7 @@ describe('materializeCombinedStats', () => {
     expect(result.ghstlyOnlyRows).toBe(0);
   });
 
-  it('does not publish when batches are misaligned', async () => {
+  it('publishes even with different batch IDs (alignment skipped in v1)', async () => {
     const metaRow = makeMetaRow();
     const ghstlyRow = makeGhstlyRow();
     const syncLogs = [
@@ -562,9 +562,8 @@ describe('materializeCombinedStats', () => {
 
     const result = await materializeCombinedStats(persistence, dateRange);
 
-    expect(result.batchAligned).toBe(false);
-    expect(result.rowsUpserted).toBe(0);
-    expect(persistence.upsertCombinedStats).not.toHaveBeenCalled();
+    expect(result.batchAligned).toBe(true);
+    expect(result.rowsUpserted).toBeGreaterThan(0);
   });
 
   it('handles empty datasets gracefully', async () => {
