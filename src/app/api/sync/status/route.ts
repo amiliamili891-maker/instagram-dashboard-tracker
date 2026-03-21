@@ -44,17 +44,41 @@ export async function GET() {
   const freshness = computeFreshness(syncLogs);
 
   // Check if a sync is currently running
-  const { data: runningLogs } = await serviceClient
+  // Look for the latest combined orchestrate row — if it's "running" AND
+  // no completed row exists for the same batch, the sync is truly active.
+  const { data: latestOrchestrate } = await serviceClient
     .from('sync_logs')
-    .select('sync_batch_id, started_at, source')
+    .select('sync_batch_id, status')
     .eq('source', 'combined')
     .eq('stage', 'orchestrate')
-    .eq('status', 'running')
     .order('started_at', { ascending: false })
-    .limit(1);
+    .limit(2);
 
-  const isRunning = (runningLogs ?? []).length > 0;
-  const runningSyncId = isRunning ? runningLogs![0].sync_batch_id : null;
+  let isRunning = false;
+  let runningSyncId: string | null = null;
+
+  if (latestOrchestrate && latestOrchestrate.length > 0) {
+    const latest = latestOrchestrate[0];
+    if (latest.status === 'running') {
+      // Check if there's a completed row for the same batch (orchestrator inserts both)
+      const hasCompleted = latestOrchestrate.some(
+        (r) => r.sync_batch_id === latest.sync_batch_id && r.status !== 'running',
+      );
+      if (!hasCompleted) {
+        // Also check beyond the last 2 rows
+        const { data: completedCheck } = await serviceClient
+          .from('sync_logs')
+          .select('sync_batch_id')
+          .eq('source', 'combined')
+          .eq('stage', 'orchestrate')
+          .eq('sync_batch_id', latest.sync_batch_id)
+          .in('status', ['success', 'failed'])
+          .limit(1);
+        isRunning = (completedCheck ?? []).length === 0;
+        runningSyncId = isRunning ? latest.sync_batch_id : null;
+      }
+    }
+  }
 
   return Response.json({
     freshness,
