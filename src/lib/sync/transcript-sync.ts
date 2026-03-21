@@ -18,7 +18,7 @@ export interface StoredMessage {
 
 /**
  * Fetch messages from Ghstly API and store durably in session_messages.
- * Maps Ghstly sender 'bot' → DB sender_role 'assistant'.
+ * API uses `role` field with values 'user' | 'assistant'.
  */
 export async function fetchAndStoreMessages(
   supabase: SupabaseClient,
@@ -27,14 +27,14 @@ export async function fetchAndStoreMessages(
 ): Promise<StoredMessage[]> {
   const response = await ghstlyClient.fetchSessionMessages(sessionId);
 
-  if (!response.items || response.items.length === 0) {
+  if (!response.messages || response.messages.length === 0) {
     return [];
   }
 
-  const rows = response.items.map((msg, index) => ({
+  const rows = response.messages.map((msg, index) => ({
     session_id: sessionId,
     message_index: index,
-    sender_role: msg.sender === 'bot' ? 'assistant' : msg.sender,
+    sender_role: msg.role,
     message_text: msg.content,
     created_at: msg.created_at || null,
     raw: msg,

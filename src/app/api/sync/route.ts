@@ -81,7 +81,7 @@ function buildSyncDeps(env: ReturnType<typeof getServerEnv>, syncType: SyncType,
         if ((rows as unknown[]).length === 0) return;
         const { error } = await serviceClient
           .from('sessions')
-          .upsert(rows as Record<string, unknown>[], { onConflict: 'session_id', ignoreDuplicates: false });
+          .upsert(rows as Record<string, unknown>[], { onConflict: 'id', ignoreDuplicates: false });
         if (error) throw new Error(`Failed to upsert sessions: ${error.message}`);
       },
       async insertSyncLog(entry: unknown) {

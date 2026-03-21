@@ -22,13 +22,16 @@ import type {
 // ---------------------------------------------------------------------------
 
 export interface GhstlyStatsFilters {
+  start_date?: string;
+  finish_date?: string;
   campaign_id?: string;
   adset_id?: string;
+  ad_id?: string;
 }
 
 export interface GhstlyStatsDailyFilters {
-  date_from?: string;
-  date_to?: string;
+  start_date?: string;
+  finish_date?: string;
   campaign_id?: string;
   adset_id?: string;
 }
@@ -36,22 +39,25 @@ export interface GhstlyStatsDailyFilters {
 export interface GhstlySessionsParams {
   limit?: number;
   offset?: number;
-  campaign_id?: string;
-  adset_id?: string;
-  date_from?: string;
-  date_to?: string;
+  campaign?: string;
+  start_date?: string;
+  finish_date?: string;
 }
 
 export interface GhstlySessionMessage {
   id: string;
-  session_id: string;
-  sender: 'user' | 'bot';
+  role: 'user' | 'assistant';
   content: string;
   created_at: string;
 }
 
 export interface GhstlySessionMessagesResponse {
-  items: GhstlySessionMessage[];
+  session_id: string;
+  brand: string;
+  status: string;
+  created_at: string;
+  messages_count: number;
+  messages: GhstlySessionMessage[];
 }
 
 export interface GhstlyClientConfig {
@@ -135,8 +141,11 @@ export class GhstlyClient {
    */
   async fetchStats(filters?: GhstlyStatsFilters): Promise<GhstlyStatsResponse> {
     return this.request<GhstlyStatsResponse>('/stats', {
+      start_date: filters?.start_date,
+      finish_date: filters?.finish_date,
       campaign_id: filters?.campaign_id,
       adset_id: filters?.adset_id,
+      ad_id: filters?.ad_id,
     });
   }
 
@@ -147,8 +156,8 @@ export class GhstlyClient {
    */
   async fetchStatsDaily(filters?: GhstlyStatsDailyFilters): Promise<GhstlyStatsDailyResponse> {
     return this.request<GhstlyStatsDailyResponse>('/stats/daily', {
-      date_from: filters?.date_from,
-      date_to: filters?.date_to,
+      start_date: filters?.start_date,
+      finish_date: filters?.finish_date,
       campaign_id: filters?.campaign_id,
       adset_id: filters?.adset_id,
     });
@@ -162,10 +171,9 @@ export class GhstlyClient {
     return this.request<GhstlySessionsResponse>('/sessions', {
       limit: params?.limit,
       offset: params?.offset,
-      campaign_id: params?.campaign_id,
-      adset_id: params?.adset_id,
-      date_from: params?.date_from,
-      date_to: params?.date_to,
+      campaign: params?.campaign,
+      start_date: params?.start_date,
+      finish_date: params?.finish_date,
     });
   }
 

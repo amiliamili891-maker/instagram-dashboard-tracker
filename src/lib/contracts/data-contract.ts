@@ -80,48 +80,43 @@ export interface GhstlySession {
   created_at: string;
   started_at: string;
   ended_at: string | null;
-  status: GhstlySessionStatus;
+  status: string;
   messages_count: number;
   brand: string;
-  brand_slug: string;
-  phase: GhstlyChatPhase;
   reached_reveal: boolean;
   clicked_through: boolean;
   converted: boolean;
-  conversion_status: GhstlyConversionStatus;
-  converted_at: string | null;
-  reveal_platform: string | null;
-  reveal_username: string | null;
 
   // UTM fields — these are the JOIN KEYS to Meta
-  source: string;
-  medium: string;
   /** Maps to Meta campaign_id */
   campaign: string;
-  /** Maps to Meta ad_id (NOT adset_id — confusing naming) */
-  creative: string;
   /** Maps to Meta adset_id */
   keyword: string;
-  /** Always empty string in live data — IGNORED for joins */
-  ad_id: string;
+  /** Maps to Meta ad_id */
+  creative: string;
 
   // Geo
   city: string;
   region: string;
   country: string;
 
-  // Lead info (often null)
-  lead_age: string | null;
-  lead_gender: string | null;
-  lead_name: string | null;
-
-  // Media counts
-  photos_sent: number;
-  voice_messages_sent: number;
-
-  // PII — DO NOT PERSIST in database
-  ip_address: string;
-  user_agent: string;
+  // Optional fields that may or may not be present
+  brand_slug?: string;
+  phase?: string | null;
+  conversion_status?: string;
+  converted_at?: string | null;
+  reveal_platform?: string | null;
+  reveal_username?: string | null;
+  source?: string;
+  medium?: string;
+  ad_id?: string;
+  lead_age?: string | null;
+  lead_gender?: string | null;
+  lead_name?: string | null;
+  photos_sent?: number;
+  voice_messages_sent?: number;
+  ip_address?: string;
+  user_agent?: string;
 }
 
 /** Full response from GET /api/partner/sessions */

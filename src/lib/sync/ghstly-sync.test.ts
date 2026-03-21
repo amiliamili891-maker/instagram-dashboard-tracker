@@ -43,31 +43,15 @@ function makeSession(overrides: Partial<GhstlySession> = {}): GhstlySession {
     status: 'active',
     messages_count: 17,
     brand: 'Ghstly',
-    brand_slug: 'ghstly',
-    phase: 'rapport',
     reached_reveal: false,
     clicked_through: false,
     converted: false,
-    conversion_status: 'new',
-    converted_at: null,
-    reveal_platform: null,
-    reveal_username: null,
-    source: 'meta',
-    medium: 'paid_social',
     campaign: '120244144794240528',
     creative: '120244145635450528',
     keyword: '120244145635460528',
-    ad_id: '',
     city: 'Covington',
     region: 'Georgia',
     country: 'US',
-    lead_age: null,
-    lead_gender: null,
-    lead_name: null,
-    photos_sent: 1,
-    voice_messages_sent: 0,
-    ip_address: '2600:1700:1d90:3c10:e814:3d96:3a1b:cef8',
-    user_agent: 'Mozilla/5.0 (Linux; Android 13) Safari/537.36',
     ...overrides,
   };
 }
@@ -462,32 +446,19 @@ describe('transformSession — row completeness', () => {
     const session = makeSession();
     const row = transformSession(session, TEST_BATCH_ID);
 
-    expect(row.session_id).toBe(session.session_id);
-    expect(row.created_at).toBe(session.created_at);
-    expect(row.started_at).toBe(session.started_at);
-    expect(row.ended_at).toBe(session.ended_at);
+    expect(row.id).toBe(session.session_id);
+    expect(row.created_at_utc).toBe(session.created_at);
+    expect(row.started_at_utc).toBe(session.started_at);
+    expect(row.ended_at_utc).toBe(session.ended_at);
     expect(row.status).toBe(session.status);
     expect(row.messages_count).toBe(session.messages_count);
     expect(row.brand).toBe(session.brand);
-    expect(row.brand_slug).toBe(session.brand_slug);
-    expect(row.phase).toBe(session.phase);
     expect(row.reached_reveal).toBe(session.reached_reveal);
     expect(row.clicked_through).toBe(session.clicked_through);
     expect(row.converted).toBe(session.converted);
-    expect(row.conversion_status).toBe(session.conversion_status);
-    expect(row.converted_at).toBe(session.converted_at);
-    expect(row.reveal_platform).toBe(session.reveal_platform);
-    expect(row.reveal_username).toBe(session.reveal_username);
-    expect(row.source).toBe(session.source);
-    expect(row.medium).toBe(session.medium);
     expect(row.city).toBe(session.city);
     expect(row.region).toBe(session.region);
     expect(row.country).toBe(session.country);
-    expect(row.lead_age).toBe(session.lead_age);
-    expect(row.lead_gender).toBe(session.lead_gender);
-    expect(row.lead_name).toBe(session.lead_name);
-    expect(row.photos_sent).toBe(session.photos_sent);
-    expect(row.voice_messages_sent).toBe(session.voice_messages_sent);
   });
 
   it('has exactly the expected keys (no extra, no missing)', () => {
@@ -499,35 +470,22 @@ describe('transformSession — row completeness', () => {
       'ad_id',
       'adset_id',
       'brand',
-      'brand_slug',
       'campaign_id',
       'city',
       'clicked_through',
-      'conversion_status',
       'converted',
-      'converted_at',
       'country',
-      'created_at',
-      'ended_at',
+      'created_at_utc',
+      'ended_at_utc',
+      'id',
       'join_issue',
       'join_status',
-      'lead_age',
-      'lead_gender',
-      'lead_name',
-      'medium',
       'messages_count',
-      'phase',
-      'photos_sent',
       'reached_reveal',
       'region',
-      'reveal_platform',
-      'reveal_username',
-      'session_id',
-      'source',
-      'started_at',
+      'started_at_utc',
       'status',
       'sync_batch_id',
-      'voice_messages_sent',
     ].sort();
 
     expect(keys).toEqual(expectedKeys);

@@ -51,42 +51,25 @@ export interface DailyGhstlyStatsRow {
 
 /** A session row ready for database upsert, with PII stripped */
 export interface SessionRow {
-  session_id: string;
-  created_at: string;
-  started_at: string;
-  ended_at: string | null;
+  id: string;
+  created_at_utc: string;
+  started_at_utc: string;
+  ended_at_utc: string | null;
   status: string;
   messages_count: number;
   brand: string;
-  brand_slug: string;
-  phase: string | null;
   reached_reveal: boolean;
   clicked_through: boolean;
   converted: boolean;
-  conversion_status: string;
-  converted_at: string | null;
-  reveal_platform: string | null;
-  reveal_username: string | null;
-  source: string;
-  medium: string;
-  /** Canonical join key: mapped from session.campaign */
   campaign_id: string;
-  /** Canonical join key: mapped from session.keyword */
   adset_id: string;
-  /** Canonical join key: mapped from session.creative */
   ad_id: string;
   city: string;
   region: string;
   country: string;
-  lead_age: string | null;
-  lead_gender: string | null;
-  lead_name: string | null;
-  photos_sent: number;
-  voice_messages_sent: number;
   sync_batch_id: string;
   join_status: 'joinable' | 'unjoinable';
   join_issue: string | null;
-  // NOTE: ip_address and user_agent are intentionally ABSENT
 }
 
 /** Sync log entry */
@@ -183,39 +166,25 @@ export function transformSession(
   });
 
   return {
-    session_id: session.session_id,
-    created_at: session.created_at,
-    started_at: session.started_at,
-    ended_at: session.ended_at,
+    id: session.session_id,
+    created_at_utc: session.created_at,
+    started_at_utc: session.started_at,
+    ended_at_utc: session.ended_at,
     status: session.status,
     messages_count: session.messages_count,
     brand: session.brand,
-    brand_slug: session.brand_slug,
-    phase: session.phase,
     reached_reveal: session.reached_reveal,
     clicked_through: session.clicked_through,
     converted: session.converted,
-    conversion_status: session.conversion_status,
-    converted_at: session.converted_at,
-    reveal_platform: session.reveal_platform,
-    reveal_username: session.reveal_username,
-    source: session.source,
-    medium: session.medium,
     campaign_id: joinKeys.campaign_id,
     adset_id: joinKeys.adset_id,
     ad_id: joinKeys.ad_id,
     city: session.city,
     region: session.region,
     country: session.country,
-    lead_age: session.lead_age,
-    lead_gender: session.lead_gender,
-    lead_name: session.lead_name,
-    photos_sent: session.photos_sent,
-    voice_messages_sent: session.voice_messages_sent,
     sync_batch_id: syncBatchId,
     join_status: classification.status,
     join_issue: classification.issue,
-    // ip_address and user_agent are intentionally NOT included
   };
 }
 
@@ -256,7 +225,7 @@ export function generateSyncBatchId(): string {
  */
 async function fetchAllSessions(
   client: GhstlyClient,
-  filters?: { date_from?: string; date_to?: string },
+  filters?: { start_date?: string; finish_date?: string },
   pageSize = 100,
 ): Promise<GhstlySession[]> {
   const allSessions: GhstlySession[] = [];
@@ -267,8 +236,8 @@ async function fetchAllSessions(
     const response = await client.fetchSessions({
       limit: pageSize,
       offset,
-      date_from: filters?.date_from,
-      date_to: filters?.date_to,
+      start_date: filters?.start_date,
+      finish_date: filters?.finish_date,
     });
 
     total = response.total;
@@ -330,8 +299,8 @@ async function executeSyncForDateRange(
 
   try {
     const dailyResponse = await client.fetchStatsDaily({
-      date_from: dateFrom,
-      date_to: dateTo,
+      start_date: dateFrom,
+      finish_date: dateTo,
     });
 
     const allRows = dailyResponse.items.map((row) =>
@@ -386,8 +355,8 @@ async function executeSyncForDateRange(
 
   try {
     const sessions = await fetchAllSessions(client, {
-      date_from: dateFrom,
-      date_to: dateTo,
+      start_date: dateFrom,
+      finish_date: dateTo,
     });
 
     sessionRows = sessions.map((session) =>
