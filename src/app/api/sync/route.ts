@@ -7,6 +7,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'crypto';
+import { materializeCombinedStats, type CombinePersistence } from '@/lib/sync/combine';
 import { getServerEnv } from '@/lib/env';
 import { isAdminEmail } from '@/lib/auth/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
@@ -95,7 +96,72 @@ function buildSyncDeps(env: ReturnType<typeof getServerEnv>, syncType: SyncType,
     return { recordsSynced: result.dailyStatsRows.length + result.sessionRows.length };
   };
 
-  return { persistence, metaSyncFn, ghstlySyncFn };
+  return { persistence, metaSyncFn, ghstlySyncFn, serviceClient };
+}
+
+/**
+ * Run the combine step after sync completes.
+ * Materializes daily_combined_stats from Meta + Ghstly source tables.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function runCombineStep(serviceClient: any, backfillDays: number) {
+  // materializeCombinedStats and CombinePersistence imported at top level
+
+  // Date range: from backfillDays ago (or 2 days for incremental) to today
+  const now = new Date();
+  const to = now.toISOString().split('T')[0];
+  const daysBack = backfillDays > 0 ? backfillDays : 2;
+  const from = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const combinePersistence: CombinePersistence = {
+    async fetchMetaStats(dateRange) {
+      const { data } = await serviceClient
+        .from('daily_meta_stats')
+        .select('*')
+        .gte('report_date', dateRange.from)
+        .lte('report_date', dateRange.to);
+      return data ?? [];
+    },
+    async fetchGhstlyStats(dateRange) {
+      const { data } = await serviceClient
+        .from('daily_ghstly_stats')
+        .select('*')
+        .gte('report_date', dateRange.from)
+        .lte('report_date', dateRange.to);
+      return data ?? [];
+    },
+    async fetchSyncLogs(batchIds) {
+      if (batchIds.length === 0) return [];
+      const { data } = await serviceClient
+        .from('sync_logs')
+        .select('sync_batch_id, source, status, completed_at')
+        .in('sync_batch_id', batchIds);
+      return data ?? [];
+    },
+    async upsertCombinedStats(rows) {
+      if (rows.length === 0) return 0;
+      const { error } = await serviceClient
+        .from('daily_combined_stats')
+        .upsert(rows as unknown as Record<string, unknown>[], {
+          onConflict: 'report_date,entity_level,entity_id',
+          ignoreDuplicates: false,
+        });
+      if (error) {
+        console.error('Failed to upsert combined stats:', error.message);
+        return 0;
+      }
+      return rows.length;
+    },
+  };
+
+  try {
+    const result = await materializeCombinedStats(combinePersistence, { from, to });
+    console.log(`Combined stats materialized: ${result.rowsUpserted} rows (${result.joinableRows} joinable, ${result.metaOnlyRows} meta-only)`);
+    return result;
+  } catch (err) {
+    console.error('Combine step failed:', err);
+    return null;
+  }
 }
 
 /**
@@ -118,12 +184,16 @@ export async function GET(request: Request) {
   }
 
   const env = getServerEnv();
-  const { persistence, metaSyncFn, ghstlySyncFn } = buildSyncDeps(env, 'incremental', 0);
+  const { persistence, metaSyncFn, ghstlySyncFn, serviceClient } = buildSyncDeps(env, 'incremental', 0);
 
   try {
     const result = await runCombinedSync('incremental', persistence, metaSyncFn, ghstlySyncFn, {
       triggeredBy: 'vercel-cron',
     });
+
+    // Materialize combined stats after sync
+    await runCombineStep(serviceClient, 2);
+
     const status = result.metaSuccess && result.ghstlySuccess ? 200 : 207;
     return Response.json(result, { status });
   } catch (error) {
@@ -159,7 +229,7 @@ export async function POST(request: Request) {
   }
 
   // --- Build shared sync dependencies ---
-  const { persistence, metaSyncFn, ghstlySyncFn } = buildSyncDeps(env, syncType, backfillDays);
+  const { persistence, metaSyncFn, ghstlySyncFn, serviceClient } = buildSyncDeps(env, syncType, backfillDays);
 
   // --- Run the combined sync ---
   try {
@@ -173,6 +243,9 @@ export async function POST(request: Request) {
         backfillDays,
       },
     );
+
+    // Materialize combined stats after sync
+    await runCombineStep(serviceClient, syncType === 'backfill' ? backfillDays : 2);
 
     const status = result.metaSuccess && result.ghstlySuccess ? 200 : 207;
     return Response.json(result, { status });
