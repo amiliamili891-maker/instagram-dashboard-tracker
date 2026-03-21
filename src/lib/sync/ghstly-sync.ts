@@ -244,9 +244,7 @@ function getTodayLA(): string {
  * Generate a unique sync batch ID.
  */
 export function generateSyncBatchId(): string {
-  const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
-  const random = Math.random().toString(36).slice(2, 8);
-  return `ghstly_${timestamp}_${random}`;
+  return crypto.randomUUID();
 }
 
 // ---------------------------------------------------------------------------

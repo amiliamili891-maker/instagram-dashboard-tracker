@@ -32,7 +32,7 @@ import ghstlySessions from '@/test/fixtures/ghstly-sessions.json';
 // Helpers
 // ---------------------------------------------------------------------------
 
-const TEST_BATCH_ID = 'ghstly_20260321_test01';
+const TEST_BATCH_ID = '00000000-0000-0000-0000-000000000001';
 
 function makeSession(overrides: Partial<GhstlySession> = {}): GhstlySession {
   return {
@@ -423,11 +423,11 @@ describe('sync idempotency', () => {
     // All rows have sync_batch_id
     for (const row of result.dailyStatsRows) {
       expect(row.sync_batch_id).toBeTruthy();
-      expect(row.sync_batch_id).toContain('ghstly_');
+      expect(row.sync_batch_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-/);
     }
     for (const row of result.sessionRows) {
       expect(row.sync_batch_id).toBeTruthy();
-      expect(row.sync_batch_id).toContain('ghstly_');
+      expect(row.sync_batch_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-/);
     }
   });
 
