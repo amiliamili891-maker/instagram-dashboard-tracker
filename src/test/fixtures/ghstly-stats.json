@@ -1,0 +1,711 @@
+{
+    "items": [
+        {
+            "campaign_id": null,
+            "adset_id": null,
+            "ad_id": "link_in_bio",
+            "visits": 659,
+            "chats": 499,
+            "reveals": 153,
+            "click_throughs": 102,
+            "conversions": 6
+        },
+        {
+            "campaign_id": "120244038939310528",
+            "adset_id": "120244038939320528",
+            "ad_id": "120244039008080528",
+            "visits": 540,
+            "chats": 219,
+            "reveals": 82,
+            "click_throughs": 55,
+            "conversions": 2
+        },
+        {
+            "campaign_id": "120243990353620528",
+            "adset_id": "120243990353630528",
+            "ad_id": "120243990353640528",
+            "visits": 452,
+            "chats": 272,
+            "reveals": 113,
+            "click_throughs": 77,
+            "conversions": 2
+        },
+        {
+            "campaign_id": "120244066166690528",
+            "adset_id": "120244066166670528",
+            "ad_id": "120244066337930528",
+            "visits": 421,
+            "chats": 256,
+            "reveals": 86,
+            "click_throughs": 58,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120243992346940528",
+            "adset_id": "120243992346950528",
+            "ad_id": "120243992346930528",
+            "visits": 414,
+            "chats": 277,
+            "reveals": 110,
+            "click_throughs": 63,
+            "conversions": 3
+        },
+        {
+            "campaign_id": "120244033805690528",
+            "adset_id": "120244033805710528",
+            "ad_id": "120244033805700528",
+            "visits": 412,
+            "chats": 174,
+            "reveals": 50,
+            "click_throughs": 34,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244038939310528",
+            "adset_id": "120244039079930528",
+            "ad_id": "120244039079910528",
+            "visits": 405,
+            "chats": 155,
+            "reveals": 51,
+            "click_throughs": 36,
+            "conversions": 2
+        },
+        {
+            "campaign_id": "120243992346940528",
+            "adset_id": "120243992455670528",
+            "ad_id": "120243992455660528",
+            "visits": 392,
+            "chats": 252,
+            "reveals": 99,
+            "click_throughs": 64,
+            "conversions": 2
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145698840528",
+            "ad_id": "120244145698850528",
+            "visits": 335,
+            "chats": 171,
+            "reveals": 50,
+            "click_throughs": 39,
+            "conversions": 2
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244144794230528",
+            "ad_id": "120244144794250528",
+            "visits": 287,
+            "chats": 148,
+            "reveals": 42,
+            "click_throughs": 34,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145635460528",
+            "ad_id": "120244145635450528",
+            "visits": 258,
+            "chats": 151,
+            "reveals": 39,
+            "click_throughs": 30,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145444170528",
+            "ad_id": "120244145444160528",
+            "visits": 242,
+            "chats": 152,
+            "reveals": 43,
+            "click_throughs": 27,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066872600528",
+            "ad_id": "120244066872630528",
+            "visits": 234,
+            "chats": 120,
+            "reveals": 46,
+            "click_throughs": 31,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066166690528",
+            "adset_id": "120244066349480528",
+            "ad_id": "120244066349470528",
+            "visits": 233,
+            "chats": 131,
+            "reveals": 31,
+            "click_throughs": 21,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244039286370528",
+            "adset_id": "120244039551620528",
+            "ad_id": "120244039551630528",
+            "visits": 218,
+            "chats": 125,
+            "reveals": 61,
+            "click_throughs": 36,
+            "conversions": 2
+        },
+        {
+            "campaign_id": "120244039945970528",
+            "adset_id": "120244040122800528",
+            "ad_id": "120244040122780528",
+            "visits": 217,
+            "chats": 146,
+            "reveals": 38,
+            "click_throughs": 26,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244066166690528",
+            "adset_id": "120244066166670528",
+            "ad_id": "120244066166680528",
+            "visits": 196,
+            "chats": 117,
+            "reveals": 25,
+            "click_throughs": 20,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066882340528",
+            "ad_id": "120244066882330528",
+            "visits": 196,
+            "chats": 104,
+            "reveals": 50,
+            "click_throughs": 36,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145578110528",
+            "ad_id": "120244145578120528",
+            "visits": 185,
+            "chats": 133,
+            "reveals": 52,
+            "click_throughs": 34,
+            "conversions": 4
+        },
+        {
+            "campaign_id": "120244038836190528",
+            "adset_id": "120244038836200528",
+            "ad_id": "120244038836180528",
+            "visits": 184,
+            "chats": 94,
+            "reveals": 23,
+            "click_throughs": 18,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244033805690528",
+            "adset_id": "120244038440920528",
+            "ad_id": "120244038440910528",
+            "visits": 184,
+            "chats": 79,
+            "reveals": 19,
+            "click_throughs": 15,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244039286370528",
+            "adset_id": "120244039286380528",
+            "ad_id": "120244039286360528",
+            "visits": 178,
+            "chats": 92,
+            "reveals": 37,
+            "click_throughs": 24,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244039945970528",
+            "adset_id": "120244039945980528",
+            "ad_id": "120244040114100528",
+            "visits": 168,
+            "chats": 101,
+            "reveals": 27,
+            "click_throughs": 15,
+            "conversions": 2
+        },
+        {
+            "campaign_id": "120244038836190528",
+            "adset_id": "120244038900700528",
+            "ad_id": "120244038900690528",
+            "visits": 155,
+            "chats": 84,
+            "reveals": 18,
+            "click_throughs": 14,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244038836190528",
+            "adset_id": "120244038893270528",
+            "ad_id": "120244038893280528",
+            "visits": 144,
+            "chats": 72,
+            "reveals": 31,
+            "click_throughs": 20,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145681560528",
+            "ad_id": "120244145681570528",
+            "visits": 142,
+            "chats": 74,
+            "reveals": 19,
+            "click_throughs": 14,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145526630528",
+            "ad_id": "120244145526640528",
+            "visits": 139,
+            "chats": 71,
+            "reveals": 20,
+            "click_throughs": 12,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066166690528",
+            "adset_id": "120244066349480528",
+            "ad_id": "120244066349490528",
+            "visits": 138,
+            "chats": 77,
+            "reveals": 22,
+            "click_throughs": 16,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244038939310528",
+            "adset_id": "120244039079930528",
+            "ad_id": "120244039079920528",
+            "visits": 121,
+            "chats": 52,
+            "reveals": 20,
+            "click_throughs": 16,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066872600528",
+            "ad_id": "120244066872620528",
+            "visits": 111,
+            "chats": 57,
+            "reveals": 17,
+            "click_throughs": 9,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244033805690528",
+            "adset_id": "120244038423200528",
+            "ad_id": "120244038536140528",
+            "visits": 109,
+            "chats": 48,
+            "reveals": 17,
+            "click_throughs": 13,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066663820528",
+            "ad_id": "120244066794650528",
+            "visits": 105,
+            "chats": 56,
+            "reveals": 13,
+            "click_throughs": 12,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244033805690528",
+            "adset_id": "120244033805710528",
+            "ad_id": "120244038514020528",
+            "visits": 96,
+            "chats": 46,
+            "reveals": 17,
+            "click_throughs": 11,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120243947130160528",
+            "adset_id": "120243947130170528",
+            "ad_id": "120243947130180528",
+            "visits": 82,
+            "chats": 2,
+            "reveals": 1,
+            "click_throughs": 1,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244038939310528",
+            "adset_id": "120244038939320528",
+            "ad_id": "120244038939330528",
+            "visits": 81,
+            "chats": 41,
+            "reveals": 14,
+            "click_throughs": 11,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244039945970528",
+            "adset_id": "120244039945980528",
+            "ad_id": "120244039945960528",
+            "visits": 75,
+            "chats": 41,
+            "reveals": 12,
+            "click_throughs": 8,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244038836190528",
+            "adset_id": "120244038893270528",
+            "ad_id": "120244038893290528",
+            "visits": 68,
+            "chats": 45,
+            "reveals": 13,
+            "click_throughs": 7,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244039286370528",
+            "adset_id": "120244039551620528",
+            "ad_id": "120244039551610528",
+            "visits": 67,
+            "chats": 42,
+            "reveals": 13,
+            "click_throughs": 8,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066872600528",
+            "ad_id": "120244066872610528",
+            "visits": 66,
+            "chats": 30,
+            "reveals": 11,
+            "click_throughs": 8,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066663820528",
+            "ad_id": "120244066794690528",
+            "visits": 62,
+            "chats": 34,
+            "reveals": 13,
+            "click_throughs": 10,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244033805690528",
+            "adset_id": "120244038423200528",
+            "ad_id": "120244038423210528",
+            "visits": 61,
+            "chats": 39,
+            "reveals": 14,
+            "click_throughs": 11,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244038836190528",
+            "adset_id": "120244038836200528",
+            "ad_id": "120244038879850528",
+            "visits": 60,
+            "chats": 26,
+            "reveals": 6,
+            "click_throughs": 4,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066663820528",
+            "ad_id": "120244066663830528",
+            "visits": 60,
+            "chats": 31,
+            "reveals": 12,
+            "click_throughs": 6,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "{{campaign.id}}",
+            "adset_id": "{{adset.id}}",
+            "ad_id": "{{ad.id}}",
+            "visits": 58,
+            "chats": 45,
+            "reveals": 24,
+            "click_throughs": 18,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145444170528",
+            "ad_id": "120244145444180528",
+            "visits": 57,
+            "chats": 24,
+            "reveals": 11,
+            "click_throughs": 9,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120243919935230528",
+            "adset_id": "120243919935240528",
+            "ad_id": "120243919935250528",
+            "visits": 53,
+            "chats": 5,
+            "reveals": 0,
+            "click_throughs": 0,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244038836190528",
+            "adset_id": "120244038900700528",
+            "ad_id": "120244038900710528",
+            "visits": 50,
+            "chats": 17,
+            "reveals": 0,
+            "click_throughs": 0,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244039286370528",
+            "adset_id": "120244039286380528",
+            "ad_id": "120244039535860528",
+            "visits": 49,
+            "chats": 27,
+            "reveals": 10,
+            "click_throughs": 4,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145719650528",
+            "ad_id": "120244145719660528",
+            "visits": 45,
+            "chats": 20,
+            "reveals": 5,
+            "click_throughs": 3,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066882340528",
+            "ad_id": "120244066882320528",
+            "visits": 39,
+            "chats": 14,
+            "reveals": 5,
+            "click_throughs": 2,
+            "conversions": 1
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145578110528",
+            "ad_id": "120244145578130528",
+            "visits": 37,
+            "chats": 20,
+            "reveals": 8,
+            "click_throughs": 5,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145681560528",
+            "ad_id": "120244145681580528",
+            "visits": 33,
+            "chats": 10,
+            "reveals": 4,
+            "click_throughs": 3,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066663820528",
+            "ad_id": "120244066851520528",
+            "visits": 31,
+            "chats": 15,
+            "reveals": 4,
+            "click_throughs": 3,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066663820528",
+            "ad_id": "120244066844240528",
+            "visits": 27,
+            "chats": 13,
+            "reveals": 3,
+            "click_throughs": 2,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145719650528",
+            "ad_id": "120244145719620528",
+            "visits": 26,
+            "chats": 12,
+            "reveals": 1,
+            "click_throughs": 1,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145526630528",
+            "ad_id": "120244145526650528",
+            "visits": 21,
+            "chats": 5,
+            "reveals": 1,
+            "click_throughs": 0,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244039945970528",
+            "adset_id": "120244040122800528",
+            "ad_id": "120244040122790528",
+            "visits": 19,
+            "chats": 9,
+            "reveals": 1,
+            "click_throughs": 1,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244033805690528",
+            "adset_id": "120244038440920528",
+            "ad_id": "120244038539800528",
+            "visits": 16,
+            "chats": 8,
+            "reveals": 3,
+            "click_throughs": 2,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145635460528",
+            "ad_id": "120244145635470528",
+            "visits": 16,
+            "chats": 4,
+            "reveals": 1,
+            "click_throughs": 0,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244144794230528",
+            "ad_id": "120244145320800528",
+            "visits": 16,
+            "chats": 7,
+            "reveals": 1,
+            "click_throughs": 1,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244144794240528",
+            "adset_id": "120244145698840528",
+            "ad_id": "120244145698860528",
+            "visits": 14,
+            "chats": 3,
+            "reveals": 1,
+            "click_throughs": 1,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066663820528",
+            "ad_id": "120244066849830528",
+            "visits": 8,
+            "chats": 1,
+            "reveals": 0,
+            "click_throughs": 0,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120243919935230528",
+            "adset_id": "120243922042340528",
+            "ad_id": "120243922042350528",
+            "visits": 8,
+            "chats": 0,
+            "reveals": 0,
+            "click_throughs": 0,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120243990499490528",
+            "adset_id": "120243990499470528",
+            "ad_id": "120243990499480528",
+            "visits": 8,
+            "chats": 0,
+            "reveals": 0,
+            "click_throughs": 0,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244066663810528",
+            "adset_id": "120244066872600528",
+            "ad_id": "120244066872640528",
+            "visits": 6,
+            "chats": 1,
+            "reveals": 0,
+            "click_throughs": 0,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244039596080528",
+            "adset_id": "120244039596090528",
+            "ad_id": "120244039596100528",
+            "visits": 5,
+            "chats": 1,
+            "reveals": 0,
+            "click_throughs": 0,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120240040953010083",
+            "adset_id": "120240040953080083",
+            "ad_id": "120240040953140083",
+            "visits": 2,
+            "chats": 0,
+            "reveals": 0,
+            "click_throughs": 0,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120243813206030528",
+            "adset_id": "120243813206050528",
+            "ad_id": "120243813206040528",
+            "visits": 1,
+            "chats": 1,
+            "reveals": 1,
+            "click_throughs": 1,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120244039945970528",
+            "adset_id": "120244040122800528",
+            "ad_id": "link_in_bio",
+            "visits": 1,
+            "chats": 0,
+            "reveals": 0,
+            "click_throughs": 0,
+            "conversions": 0
+        },
+        {
+            "campaign_id": "120243881676920528",
+            "adset_id": "120243881676930528",
+            "ad_id": "120243881676940528",
+            "visits": 1,
+            "chats": 1,
+            "reveals": 0,
+            "click_throughs": 0,
+            "conversions": 0
+        }
+    ],
+    "summary": {
+        "visits": 9599,
+        "chats": 5199,
+        "reveals": 1714,
+        "click_throughs": 1162,
+        "conversions": 40
+    }
+}
