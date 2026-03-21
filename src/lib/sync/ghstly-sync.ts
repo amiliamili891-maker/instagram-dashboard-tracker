@@ -41,7 +41,7 @@ export interface DailyGhstlyStatsRow {
   chats: number;
   reveals: number;
   click_throughs: number;
-  conversions: number;
+  ghstly_conversions: number;
   sync_batch_id: string;
   join_status: 'joinable' | 'unjoinable';
   join_issue: string | null;
@@ -146,7 +146,7 @@ export function transformDailyStatsRow(
     chats: row.chats,
     reveals: row.reveals,
     click_throughs: row.click_throughs,
-    conversions: row.conversions,
+    ghstly_conversions: row.conversions,
     sync_batch_id: syncBatchId,
     join_status: classification.status,
     join_issue: classification.issue,

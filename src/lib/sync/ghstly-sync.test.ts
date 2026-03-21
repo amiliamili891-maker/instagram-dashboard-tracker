@@ -325,7 +325,7 @@ describe('transformDailyStatsRow', () => {
     expect(row.chats).toBe(3);
     expect(row.reveals).toBe(2);
     expect(row.click_throughs).toBe(2);
-    expect(row.conversions).toBe(0);
+    expect(row.ghstly_conversions).toBe(0);
   });
 
   it('attaches sync_batch_id', () => {
