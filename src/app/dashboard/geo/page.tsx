@@ -7,8 +7,8 @@
  * Auth is handled by the dashboard layout (requireAdminUser).
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { getServerEnv } from '@/lib/env';
+import { createServiceClient } from '@/lib/supabase/service';
 import { GeoControls } from './geo-controls';
 
 export const dynamic = 'force-dynamic';
@@ -31,6 +31,8 @@ interface GeoRow {
   converted: number;
 }
 
+const VALID_GROUP_BY = ['city', 'region', 'country'] as const;
+
 async function fetchGeoData(opts: {
   groupBy: string;
   dateFrom: string;
@@ -39,61 +41,47 @@ async function fetchGeoData(opts: {
   adsetId?: string;
   adId?: string;
 }): Promise<{ data: GeoRow[]; totalSessions: number }> {
-  const env = getServerEnv();
-  const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
+  const supabase = createServiceClient();
+  const groupCol = VALID_GROUP_BY.includes(opts.groupBy as typeof VALID_GROUP_BY[number])
+    ? opts.groupBy
+    : 'country';
+
+  // Use Supabase RPC for server-side GROUP BY aggregation
+  const { data, error } = await supabase.rpc('geo_breakdown', {
+    p_group_by: groupCol,
+    p_date_from: `${opts.dateFrom}T00:00:00Z`,
+    p_date_to: `${opts.dateTo}T23:59:59Z`,
+    p_campaign_id: opts.campaignId ?? null,
+    p_adset_id: opts.adsetId ?? null,
+    p_ad_id: opts.adId ?? null,
   });
 
-  let query = supabase
-    .from('sessions')
-    .select('city, region, country, reached_reveal, clicked_through, converted, messages_count')
-    .gte('created_at_utc', `${opts.dateFrom}T00:00:00Z`)
-    .lte('created_at_utc', `${opts.dateTo}T23:59:59Z`);
-
-  if (opts.campaignId) query = query.eq('campaign_id', opts.campaignId);
-  if (opts.adsetId) query = query.eq('adset_id', opts.adsetId);
-  if (opts.adId) query = query.eq('ad_id', opts.adId);
-
-  const { data } = await query;
-
-  const groups = new Map<string, {
-    sessions: number;
-    chatted: number;
-    revealed: number;
-    clicked: number;
-    converted: number;
-  }>();
-
-  for (const row of data ?? []) {
-    const groupField = opts.groupBy as 'city' | 'region' | 'country';
-    const key = (row[groupField] as string) || '(unknown)';
-
-    if (!groups.has(key)) {
-      groups.set(key, { sessions: 0, chatted: 0, revealed: 0, clicked: 0, converted: 0 });
-    }
-
-    const entry = groups.get(key)!;
-    entry.sessions += 1;
-    if (row.messages_count > 0) entry.chatted += 1;
-    if (row.reached_reveal) entry.revealed += 1;
-    if (row.clicked_through) entry.clicked += 1;
-    if (row.converted) entry.converted += 1;
+  if (error || !data) {
+    // Fallback: return empty
+    console.error('Geo RPC error:', error?.message);
+    return { data: [], totalSessions: 0 };
   }
 
-  const geoData = Array.from(groups.entries())
-    .map(([location, stats]) => ({
-      location,
-      sessions: stats.sessions,
-      chatted: stats.chatted,
-      chat_rate: stats.sessions > 0 ? stats.chatted / stats.sessions : null,
-      revealed: stats.revealed,
-      reveal_rate: stats.chatted > 0 ? stats.revealed / stats.chatted : null,
-      clicked: stats.clicked,
-      converted: stats.converted,
-    }))
-    .sort((a, b) => b.sessions - a.sessions);
+  let totalSessions = 0;
+  const geoData: GeoRow[] = (data as Array<Record<string, unknown>>).map((row) => {
+    const sessions = Number(row.sessions) || 0;
+    const chatted = Number(row.chatted) || 0;
+    const revealed = Number(row.revealed) || 0;
+    totalSessions += sessions;
+    return {
+      location: (row.location as string) || '(unknown)',
+      sessions,
+      chatted,
+      chat_rate: sessions > 0 ? chatted / sessions : null,
+      revealed,
+      reveal_rate: chatted > 0 ? revealed / chatted : null,
+      clicked: Number(row.clicked) || 0,
+      converted: Number(row.converted) || 0,
+    };
+  });
 
-  return { data: geoData, totalSessions: (data ?? []).length };
+  geoData.sort((a, b) => b.sessions - a.sessions);
+  return { data: geoData, totalSessions };
 }
 
 function formatRate(value: number | null): string {

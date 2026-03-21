@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getDateRanges, isValidPeriod } from "@/lib/date-utils";
+import { fmt } from "@/lib/format-utils";
 
 interface CampaignRow {
   campaign_id: string;
@@ -19,13 +20,6 @@ interface CampaignRow {
   reveal_rate: number | null;
 }
 
-function fmt(value: number | null, type: "currency" | "percent" | "number"): string {
-  if (value === null || value === undefined) return "\u2013";
-  if (type === "currency") return `$${value.toFixed(2)}`;
-  if (type === "percent") return `${(value * 100).toFixed(1)}%`;
-  return value.toLocaleString();
-}
-
 export function CampaignList() {
   const searchParams = useSearchParams();
   const periodParam = searchParams.get("period");
@@ -36,12 +30,17 @@ export function CampaignList() {
   useEffect(() => {
     setLoading(true);
     const { current: range } = getDateRanges(period);
-    fetch(
-      `/api/stats/combined?level=campaign&date_from=${range.from}&date_to=${range.to}`,
-    )
-      .then((r) => r.json())
-      .then(async (resp) => {
+
+    // Parallel fetch: stats + names
+    Promise.all([
+      fetch(`/api/stats/combined?level=campaign&date_from=${range.from}&date_to=${range.to}`).then((r) => r.json()),
+      fetch('/api/entity/campaigns').then((r) => r.ok ? r.json() : { campaigns: [] }).catch(() => ({ campaigns: [] })),
+    ])
+      .then(([resp, namesJson]) => {
         const data: Record<string, unknown>[] = resp.data ?? [];
+        const campaigns: { id: string; name: string }[] = namesJson.campaigns ?? [];
+        const nameMap = new Map(campaigns.map((c: { id: string; name: string }) => [c.id, c.name]));
+
         // Aggregate by entity_id across dates
         const agg = new Map<string, { spend: number; impressions: number; clicks: number; chats: number; visits: number; reveals: number }>();
         for (const row of data) {
@@ -56,19 +55,7 @@ export function CampaignList() {
           agg.set(id, existing);
         }
 
-        // Fetch campaign names from entity API
         const ids = Array.from(agg.keys());
-        let nameMap = new Map<string, string>();
-        try {
-          const namesResp = await fetch('/api/entity/campaigns');
-          if (namesResp.ok) {
-            const namesJson = await namesResp.json();
-            const campaigns: { id: string; name: string }[] = namesJson.campaigns ?? [];
-            nameMap = new Map(campaigns.map((c) => [c.id, c.name]));
-          }
-        } catch {
-          // Silently fall back to showing IDs
-        }
 
         const result: CampaignRow[] = ids.map((id) => {
           const a = agg.get(id)!;

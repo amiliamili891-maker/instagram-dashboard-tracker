@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getDateRanges, isValidPeriod } from "@/lib/date-utils";
+import { fmt } from "@/lib/format-utils";
 
 interface AdRow {
   ad_id: string;
@@ -17,13 +18,6 @@ interface AdRow {
   cost_per_chat: number | null;
   chat_rate: number | null;
   reveal_rate: number | null;
-}
-
-function fmt(value: number | null, type: "currency" | "percent" | "number"): string {
-  if (value === null || value === undefined) return "\u2013";
-  if (type === "currency") return `$${value.toFixed(2)}`;
-  if (type === "percent") return `${(value * 100).toFixed(1)}%`;
-  return value.toLocaleString();
 }
 
 export function AdsetDetail({ adsetId }: { adsetId: string }) {
@@ -40,31 +34,18 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
     setLoading(true);
     const { current: range } = getDateRanges(period);
 
-    fetch(
-      `/api/stats/combined?level=ad&date_from=${range.from}&date_to=${range.to}`,
-    )
-      .then((r) => r.json())
-      .then(async (resp) => {
+    // Parallel fetch: stats + entity metadata
+    Promise.all([
+      fetch(`/api/stats/combined?level=ad&date_from=${range.from}&date_to=${range.to}`).then((r) => r.json()),
+      fetch(`/api/entity/ads-by-adset?adset_id=${adsetId}`).then((r) => r.ok ? r.json() : { ads: [], adset_name: adsetId, campaign_id: "", campaign_name: "" }),
+    ])
+      .then(([resp, adsJson]) => {
         const allAdStats: Record<string, unknown>[] = resp.data ?? [];
+        const adsData: { id: string; name: string; campaign_id: string }[] = adsJson.ads ?? [];
 
-        // Fetch ads for this adset
-        const adsResp = await fetch(`/api/entity/ads-by-adset?adset_id=${adsetId}`);
-        let adsData: { id: string; name: string; campaign_id: string }[] = [];
-        let asName = adsetId;
-        let campId = "";
-
-        let campName = "";
-        if (adsResp.ok) {
-          const adsJson = await adsResp.json();
-          adsData = adsJson.ads ?? [];
-          asName = adsJson.adset_name ?? adsetId;
-          campId = adsJson.campaign_id ?? "";
-          campName = adsJson.campaign_name ?? "";
-        }
-
-        setAdsetName(asName);
-        setCampaignId(campId);
-        setCampaignName(campName);
+        setAdsetName(adsJson.adset_name ?? adsetId);
+        setCampaignId(adsJson.campaign_id ?? "");
+        setCampaignName(adsJson.campaign_name ?? "");
 
         const adIdsInAdset = new Set(adsData.map((a) => a.id));
         const adNames = new Map(adsData.map((a) => [a.id, a.name]));

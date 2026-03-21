@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AdThumbnail } from "@/components/ad-thumbnail";
+import { fmt } from "@/lib/format-utils";
 
 interface AdRow {
   entity_id: string;
@@ -24,15 +25,6 @@ interface AdRow {
   unique_clicks: number | null;
   insufficient_data: boolean;
   thumbnail_url?: string;
-}
-
-const MIN_CHATS_THRESHOLD = 5;
-
-function fmt(value: number | null, type: "currency" | "percent" | "number"): string {
-  if (value === null || value === undefined) return "\u2013";
-  if (type === "currency") return `$${value.toFixed(2)}`;
-  if (type === "percent") return `${(value * 100).toFixed(1)}%`;
-  return value.toLocaleString();
 }
 
 export function ScorecardTable() {
@@ -179,5 +171,3 @@ export function ScorecardTable() {
     </div>
   );
 }
-
-export { MIN_CHATS_THRESHOLD };

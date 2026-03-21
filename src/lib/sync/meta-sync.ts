@@ -460,52 +460,65 @@ async function upsertAds(
  * Download and cache ad creative thumbnails in Supabase Storage.
  * Non-fatal: failures are logged but don't break the sync.
  */
+const THUMBNAIL_CONCURRENCY = 5;
+
+async function cacheSingleThumbnail(
+  supabase: SupabaseClient,
+  ad: MetaAdRow,
+): Promise<boolean> {
+  const thumbnailUrl = ad.creative?.thumbnail_url;
+  if (!thumbnailUrl) return false;
+
+  const storagePath = `${ad.id}/thumbnail.jpg`;
+
+  try {
+    const response = await fetch(thumbnailUrl);
+    if (!response.ok) return false;
+
+    const contentType = response.headers.get("content-type") ?? "image/jpeg";
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const { error: uploadError } = await supabase.storage
+      .from("ad-creatives")
+      .upload(storagePath, buffer, { contentType, upsert: true });
+
+    if (uploadError) {
+      console.error(`Failed to cache thumbnail for ad ${ad.id}:`, uploadError.message);
+      return false;
+    }
+
+    const { error: updateError } = await supabase
+      .from("ads")
+      .update({ creative_storage_path: storagePath })
+      .eq("id", ad.id);
+
+    if (updateError) {
+      console.error(`Failed to update storage path for ad ${ad.id}:`, updateError.message);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error(`Thumbnail cache error for ad ${ad.id}:`, err);
+    return false;
+  }
+}
+
 async function cacheCreativeThumbnails(
   supabase: SupabaseClient,
   ads: MetaAdRow[],
 ): Promise<number> {
+  const adsWithThumbnails = ads.filter((a) => a.creative?.thumbnail_url);
   let cached = 0;
 
-  for (const ad of ads) {
-    const thumbnailUrl = ad.creative?.thumbnail_url;
-    if (!thumbnailUrl) continue;
-
-    const storagePath = `${ad.id}/thumbnail.jpg`;
-
-    try {
-      const response = await fetch(thumbnailUrl);
-      if (!response.ok) continue;
-
-      const contentType = response.headers.get("content-type") ?? "image/jpeg";
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-
-      const { error: uploadError } = await supabase.storage
-        .from("ad-creatives")
-        .upload(storagePath, buffer, {
-          contentType,
-          upsert: true,
-        });
-
-      if (uploadError) {
-        console.error(`Failed to cache thumbnail for ad ${ad.id}:`, uploadError.message);
-        continue;
-      }
-
-      const { error: updateError } = await supabase
-        .from("ads")
-        .update({ creative_storage_path: storagePath })
-        .eq("id", ad.id);
-
-      if (updateError) {
-        console.error(`Failed to update storage path for ad ${ad.id}:`, updateError.message);
-        continue;
-      }
-
-      cached++;
-    } catch (err) {
-      console.error(`Thumbnail cache error for ad ${ad.id}:`, err);
-    }
+  // Process in batches of THUMBNAIL_CONCURRENCY for parallel downloads
+  for (let i = 0; i < adsWithThumbnails.length; i += THUMBNAIL_CONCURRENCY) {
+    const batch = adsWithThumbnails.slice(i, i + THUMBNAIL_CONCURRENCY);
+    const results = await Promise.allSettled(
+      batch.map((ad) => cacheSingleThumbnail(supabase, ad)),
+    );
+    cached += results.filter((r) => r.status === "fulfilled" && r.value).length;
   }
 
   return cached;

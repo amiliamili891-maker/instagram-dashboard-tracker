@@ -8,8 +8,7 @@
  * Auth is handled by the dashboard layout (requireAdminUser).
  */
 
-import { createClient } from '@supabase/supabase-js';
-import { getServerEnv } from '@/lib/env';
+import { createServiceClient } from '@/lib/supabase/service';
 import { TrendsControls } from './trends-controls';
 import { TrendChart } from '@/components/trend-chart';
 import { formatMetricValue } from '@/lib/format-utils';
@@ -71,16 +70,14 @@ async function fetchTrends(opts: {
   adsetId?: string;
   adId?: string;
 }): Promise<TrendRow[]> {
-  const env = getServerEnv();
-  const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const supabase = createServiceClient();
 
   const isRate = RATE_METRICS.includes(opts.metric);
 
+  // Select key columns instead of SELECT *
   let query = supabase
     .from('daily_combined_stats')
-    .select('*')
+    .select('report_date, entity_id, entity_level, freshness_state, spend, impressions, clicks, unique_clicks, chats, visits, reveals, click_throughs, chat_rate, cost_per_chat, reveal_rate, cost_per_reveal, reveal_click_through_rate, ctr, cpc, cpm, cost_per_unique_click')
     .gte('report_date', opts.dateFrom)
     .lte('report_date', opts.dateTo)
     .order('report_date', { ascending: true });
@@ -91,6 +88,9 @@ async function fetchTrends(opts: {
     query = query.eq('entity_level', 'adset').eq('entity_id', opts.adsetId);
   } else if (opts.campaignId) {
     query = query.eq('entity_level', 'campaign').eq('entity_id', opts.campaignId);
+  } else {
+    // When no entity filter, default to ad-level to avoid double-counting
+    query = query.eq('entity_level', 'ad');
   }
 
   const { data } = await query;
@@ -100,7 +100,7 @@ async function fetchTrends(opts: {
 
   for (const row of data ?? []) {
     const date = row.report_date;
-    const value = row[opts.metric];
+    const value = (row as Record<string, unknown>)[opts.metric];
     const freshnessState = row.freshness_state;
 
     if (!byDate.has(date)) {
@@ -157,21 +157,13 @@ export default async function TrendsPage({
   const isCrossSource = CROSS_SOURCE_METRICS.includes(metric);
   const metricLabel = METRIC_OPTIONS.find((m) => m.value === metric)?.label ?? metric;
 
-  // Fetch primary data
-  const primaryData = await fetchTrends({ metric, dateFrom, dateTo, campaignId, adsetId, adId });
-
-  // Fetch comparison data if requested
-  let comparisonData: TrendRow[] | null = null;
-  if (compareFrom && compareTo) {
-    comparisonData = await fetchTrends({
-      metric,
-      dateFrom: compareFrom,
-      dateTo: compareTo,
-      campaignId,
-      adsetId,
-      adId,
-    });
-  }
+  // Fetch primary + comparison data in parallel
+  const [primaryData, comparisonData] = await Promise.all([
+    fetchTrends({ metric, dateFrom, dateTo, campaignId, adsetId, adId }),
+    compareFrom && compareTo
+      ? fetchTrends({ metric, dateFrom: compareFrom, dateTo: compareTo, campaignId, adsetId, adId })
+      : Promise.resolve(null),
+  ]);
 
   return (
     <section className="trends-page">

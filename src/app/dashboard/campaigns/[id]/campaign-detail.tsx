@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getDateRanges, isValidPeriod } from "@/lib/date-utils";
+import { fmt } from "@/lib/format-utils";
 
 interface AdsetRow {
   adset_id: string;
@@ -17,13 +18,6 @@ interface AdsetRow {
   cost_per_chat: number | null;
   chat_rate: number | null;
   reveal_rate: number | null;
-}
-
-function fmt(value: number | null, type: "currency" | "percent" | "number"): string {
-  if (value === null || value === undefined) return "\u2013";
-  if (type === "currency") return `$${value.toFixed(2)}`;
-  if (type === "percent") return `${(value * 100).toFixed(1)}%`;
-  return value.toLocaleString();
 }
 
 export function CampaignDetail({ campaignId }: { campaignId: string }) {

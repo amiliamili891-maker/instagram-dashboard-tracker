@@ -1,7 +1,9 @@
 /**
- * Shared metric value formatting.
- * Used by both server (trends page) and client (TrendChart) components.
+ * Shared formatting utilities.
+ * Used across server components, client components, and API routes.
  */
+
+// --- Metric-keyed formatter (for trends/charts) ---
 
 const PERCENT_METRICS = ['chat_rate', 'reveal_rate', 'reveal_click_through_rate', 'ctr'];
 const CURRENCY_METRICS = [
@@ -19,4 +21,20 @@ export function formatMetricValue(value: number | null, metric: string): string 
   }
   if (Number.isInteger(value)) return value.toLocaleString();
   return value.toFixed(2);
+}
+
+// --- Type-keyed formatter (for tables/drill-downs) ---
+
+export function fmt(value: number | null | undefined, type: "currency" | "percent" | "number"): string {
+  if (value === null || value === undefined) return "\u2013";
+  if (type === "currency") return `$${value.toFixed(2)}`;
+  if (type === "percent") return `${(value * 100).toFixed(1)}%`;
+  return value.toLocaleString();
+}
+
+// --- Safe division ---
+
+export function safeDivide(numerator: number | null | undefined, denominator: number | null | undefined): number | null {
+  if (numerator == null || denominator == null || denominator === 0) return null;
+  return numerator / denominator;
 }

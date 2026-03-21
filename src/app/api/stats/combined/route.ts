@@ -13,8 +13,7 @@
  */
 
 import { type NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { getServerEnv } from '@/lib/env';
+import { createServiceClient } from '@/lib/supabase/service';
 import { requireAdminUser } from '@/lib/auth/guards';
 
 export async function GET(request: NextRequest) {
@@ -58,14 +57,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const env = getServerEnv();
-    const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const supabase = createServiceClient();
+
+    const SELECTED_COLUMNS = 'entity_id, report_date, entity_level, spend, impressions, clicks, unique_clicks, chats, visits, reveals, click_throughs, meta_conversions, ghstly_conversions';
 
     let query = supabase
       .from('daily_combined_stats')
-      .select('*')
+      .select(SELECTED_COLUMNS)
       .eq('entity_level', level)
       .gte('report_date', dateFrom)
       .lte('report_date', dateTo)
