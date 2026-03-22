@@ -67,6 +67,8 @@ export function BudgetSection({
   const [data, setData] = useState(initialData);
   const [meta, setMeta] = useState(initialMeta);
   const [loading, setLoading] = useState(false);
+  // Track whether user has interacted — initial 7d uses server data
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   const fetchBudget = useCallback(async (numDays: number) => {
     setLoading(true);
@@ -83,16 +85,15 @@ export function BudgetSection({
     }
   }, []);
 
+  function handleDaysChange(newDays: number) {
+    setDays(newDays);
+    setHasInteracted(true);
+  }
+
   useEffect(() => {
-    // Only refetch when user changes from the initial 7d
-    if (days !== 7) {
-      fetchBudget(days);
-    } else {
-      // Reset to server-rendered data
-      setData(initialData);
-      setMeta(initialMeta);
-    }
-  }, [days, fetchBudget, initialData, initialMeta]);
+    if (!hasInteracted) return; // First render uses server-rendered data
+    fetchBudget(days);
+  }, [days, hasInteracted, fetchBudget]);
 
   // Suppress when freshness is known to be bad
   const suppressed =
@@ -119,7 +120,7 @@ export function BudgetSection({
           role="radio"
           aria-checked={days === opt.value}
           className={`budget-lookback-btn ${days === opt.value ? "budget-lookback-active" : ""}`}
-          onClick={() => setDays(opt.value)}
+          onClick={() => handleDaysChange(opt.value)}
           disabled={loading}
         >
           {opt.label}

@@ -70,10 +70,12 @@ export async function GET(request: Request) {
           scaleCandidates: [],
           totalCurrentSpend: 0,
           suggestedReallocation: 0,
+          numDays,
         },
         meta: {
           suppressed: true,
           reason: `Data freshness is ${freshnessState} — budget recommendations suppressed`,
+          days: numDays,
         },
       });
     }
