@@ -29,6 +29,7 @@ import {
 } from '@/lib/intelligence/mismatch-detector';
 import { type FreshnessState } from '@/lib/sync/freshness';
 import { ImageLightbox } from '@/components/image-lightbox';
+import { SectionCallout } from '@/components/section-callout';
 
 // ---------------------------------------------------------------------------
 // Types for display
@@ -438,6 +439,14 @@ function MismatchSection({ result }: { result: MismatchResult & { entityNames: R
           <span className="budget-count">{result.mismatches.length}</span>
         )}
       </div>
+      <SectionCallout>
+        <p>Detects ads where <strong>creative performance doesn't match funnel performance</strong>:</p>
+        <ul>
+          <li><strong>CLICK &gt; CHAT</strong> (orange) — High click-through rate (50%+) but low chat rate (&lt;50%). The creative attracts clicks but the chat greeting or landing page fails. Fix: A/B test chat entry experience.</li>
+          <li><strong>CHAT &gt; REVEAL</strong> (yellow) — High chat rate (70%+) but low reveal rate (&lt;25%). Chat is engaging but the reveal prompt is weak. Fix: adjust AI persona reveal timing.</li>
+        </ul>
+        <p>Requires 50+ visits per ad in the 7-day window.</p>
+      </SectionCallout>
       <p className="mismatch-checked-note">
         {result.entitiesChecked} ads checked, {result.entitiesFlagged} flagged
       </p>
@@ -479,6 +488,14 @@ function BudgetRecommendationsSection({ budget }: { budget: BudgetResult }) {
   return (
     <div className="intelligence-section">
       <h2>Budget Recommendations</h2>
+      <SectionCallout>
+        <p>Identifies ads to <strong>kill/reduce</strong> and ads to <strong>scale</strong> based on performance tiers and spend:</p>
+        <ul>
+          <li><strong>Kill List</strong> — Ads rated Poor/Critical spending &gt;$1/day. Pause to stop wasting budget, or reduce by 50%.</li>
+          <li><strong>Scale List</strong> — Ads rated Perfect/Really Good spending below median. Increase budget to get more chats at a similar cost.</li>
+        </ul>
+        <p>Each card shows the specific metrics driving the recommendation, the dollar impact, and actionable advice. All recommendations are <strong>advisory only</strong> — nothing is changed in Meta automatically.</p>
+      </SectionCallout>
 
       {totalCurrentSpend > 0 && (
         <div className="budget-summary">
@@ -569,6 +586,15 @@ export default async function IntelligencePage() {
       {/* Threshold Tier Alerts */}
       <div className="intelligence-section">
         <h2>Performance Tiers</h2>
+        <SectionCallout>
+          <p>Every ad is classified into a tier from <strong>Perfect</strong> to <strong>Critical</strong> based on 3 metrics:</p>
+          <ul>
+            <li><strong>Chat Rate</strong> — % of visitors who start a chat (Perfect = 85%+, Critical = &lt;40%)</li>
+            <li><strong>Cost Per Chat</strong> — cost per chat started (Perfect = &le;$0.20, Critical = &gt;$0.60)</li>
+            <li><strong>Reveal Rate</strong> — % of chatters who reach the reveal (Perfect = 40%+, Critical = &lt;20%)</li>
+          </ul>
+          <p>The <strong>worst</strong> metric determines the overall tier. Requires 50+ visits and fresh data.</p>
+        </SectionCallout>
         {thresholdAlerts.length === 0 ? (
           <EmptyState
             title="No tier alerts"
@@ -586,6 +612,11 @@ export default async function IntelligencePage() {
       {/* Anomaly Alerts */}
       <div className="intelligence-section">
         <h2>Anomalies</h2>
+        <SectionCallout>
+          <p>Detects <strong>sudden performance changes</strong> by comparing the last 3 days vs the prior 3 days for each ad.</p>
+          <p>Flags any metric that swings by more than <strong>15%</strong> — chat rate drops, cost per chat spikes, reveal rate drops, CTR drops, CPC spikes.</p>
+          <p>No anomalies = stable performance across all ads. This is good.</p>
+        </SectionCallout>
         {anomalyAlerts.length === 0 ? (
           <EmptyState
             title="No anomalies detected"
@@ -603,6 +634,11 @@ export default async function IntelligencePage() {
       {/* Data Quality Alerts */}
       <div className="intelligence-section">
         <h2>Data Quality</h2>
+        <SectionCallout>
+          <p>Checks <strong>data consistency</strong> between Meta Ads and Ghstly by comparing session counts against daily stats.</p>
+          <p>If chats, reveals, or click-throughs diverge by more than <strong>10%</strong>, it flags a reconciliation breach. This catches broken UTM tracking, API sync gaps, or pipeline issues.</p>
+          <p>No issues = Meta and Ghstly data agree. Numbers are trustworthy.</p>
+        </SectionCallout>
         {dataQualityAlerts.length === 0 ? (
           <EmptyState
             title="No data quality issues"

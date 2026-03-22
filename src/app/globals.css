@@ -1519,6 +1519,99 @@ a {
 .badge-action-scale { background: rgba(26, 107, 100, 0.15); color: var(--accent); }
 .badge-action-maintain { background: rgba(93, 107, 112, 0.12); color: var(--muted); }
 
+/* ---- Section Callout (Notion-style info block) ---- */
+
+.section-callout-wrapper {
+  margin-bottom: 0.75rem;
+}
+
+.section-callout-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--muted);
+  transition: all 0.2s ease;
+}
+
+.section-callout-toggle:hover {
+  background: rgba(26, 107, 100, 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.callout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: rgba(26, 107, 100, 0.12);
+  color: var(--accent);
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-style: italic;
+  font-family: Georgia, serif;
+}
+
+.callout-label {
+  font-weight: 500;
+}
+
+.callout-chevron {
+  transition: transform 0.2s ease;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.callout-chevron-open {
+  transform: rotate(90deg);
+}
+
+.section-callout-body {
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba(26, 107, 100, 0.04);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 0.5rem 0.5rem 0;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--foreground);
+  animation: callout-fade-in 0.2s ease;
+}
+
+.section-callout-body p {
+  margin: 0 0 0.4rem;
+}
+
+.section-callout-body p:last-child {
+  margin-bottom: 0;
+}
+
+.section-callout-body ul {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.25rem;
+}
+
+.section-callout-body li {
+  margin-bottom: 0.25rem;
+}
+
+.section-callout-body strong {
+  color: var(--accent-strong);
+}
+
+@keyframes callout-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ---- Creative-Funnel Mismatches ---- */
 
 .mismatch-section {
