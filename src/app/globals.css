@@ -2151,13 +2151,58 @@ a {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 0.75rem;
   margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.budget-header-right {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.budget-lookback {
+  display: flex;
+  gap: 2px;
+  background: var(--panel-border);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.budget-lookback-btn {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.budget-lookback-btn:hover:not(:disabled) {
+  background: rgba(26, 107, 100, 0.08);
+  color: var(--foreground);
+}
+
+.budget-lookback-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.budget-lookback-active {
+  background: var(--panel);
+  color: var(--accent-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .budget-reallocation {
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--accent);
+  white-space: nowrap;
 }
 
 .budget-loading,

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
 import type { FreshnessState } from "@/lib/sync/freshness";
 import type { BudgetRecommendation } from "@/lib/intelligence/budget-advisor";
 import { ImageLightbox } from "@/components/image-lightbox";
@@ -19,7 +20,15 @@ export interface BudgetApiData {
 export interface BudgetApiMeta {
   suppressed: boolean;
   reason?: string;
+  days?: number;
 }
+
+const LOOKBACK_OPTIONS = [
+  { value: 1, label: "1d" },
+  { value: 3, label: "3d" },
+  { value: 5, label: "5d" },
+  { value: 7, label: "7d" },
+] as const;
 
 function formatSpend(value: number): string {
   return `$${value.toFixed(2)}`;
@@ -46,13 +55,44 @@ function RationaleBlock({ rationale }: { rationale: string }) {
 
 export function BudgetSection({
   freshnessState,
-  data,
-  meta,
+  data: initialData,
+  meta: initialMeta,
 }: {
   freshnessState: FreshnessState | null;
   data: BudgetApiData | null;
   meta: BudgetApiMeta | null;
 }) {
+  const [days, setDays] = useState(7);
+  const [data, setData] = useState(initialData);
+  const [meta, setMeta] = useState(initialMeta);
+  const [loading, setLoading] = useState(false);
+
+  const fetchBudget = useCallback(async (numDays: number) => {
+    setLoading(true);
+    try {
+      const resp = await fetch(`/api/intelligence/budget?days=${numDays}`);
+      if (!resp.ok) throw new Error("Failed to fetch");
+      const json = await resp.json();
+      setData(json.data);
+      setMeta(json.meta);
+    } catch {
+      // Keep existing data on error
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Only refetch when user changes from the initial 7d
+    if (days !== 7) {
+      fetchBudget(days);
+    } else {
+      // Reset to server-rendered data
+      setData(initialData);
+      setMeta(initialMeta);
+    }
+  }, [days, fetchBudget, initialData, initialMeta]);
+
   // Suppress when freshness is known to be bad
   const suppressed =
     freshnessState === "degraded" || freshnessState === "stale";
@@ -69,10 +109,31 @@ export function BudgetSection({
     );
   }
 
+  const lookbackSelector = (
+    <div className="budget-lookback" role="radiogroup" aria-label="Lookback period">
+      {LOOKBACK_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          role="radio"
+          aria-checked={days === opt.value}
+          className={`budget-lookback-btn ${days === opt.value ? "budget-lookback-active" : ""}`}
+          onClick={() => setDays(opt.value)}
+          disabled={loading}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+
   if (!data || !meta) {
     return (
       <div className="budget-section">
-        <h2 className="section-title">Budget Advisor</h2>
+        <div className="budget-header">
+          <h2 className="section-title" style={{ margin: 0 }}>Budget Advisor</h2>
+          {lookbackSelector}
+        </div>
         <div className="budget-empty">Unable to load budget recommendations.</div>
       </div>
     );
@@ -82,7 +143,10 @@ export function BudgetSection({
   if (meta.suppressed) {
     return (
       <div className="budget-section">
-        <h2 className="section-title">Budget Advisor</h2>
+        <div className="budget-header">
+          <h2 className="section-title" style={{ margin: 0 }}>Budget Advisor</h2>
+          {lookbackSelector}
+        </div>
         <div className="budget-suppressed">{meta.reason}</div>
       </div>
     );
@@ -93,10 +157,13 @@ export function BudgetSection({
   if (pauseCandidates.length === 0 && scaleCandidates.length === 0) {
     return (
       <div className="budget-section">
-        <h2 className="section-title">Budget Advisor</h2>
+        <div className="budget-header">
+          <h2 className="section-title" style={{ margin: 0 }}>Budget Advisor</h2>
+          {lookbackSelector}
+        </div>
         <div className="budget-empty">
           No budget recommendations — all ads are performing within acceptable
-          ranges.
+          ranges for the last {days} day{days > 1 ? "s" : ""}.
         </div>
       </div>
     );
@@ -108,14 +175,21 @@ export function BudgetSection({
         <h2 className="section-title" style={{ margin: 0 }}>
           Budget Advisor
         </h2>
-        {suggestedReallocation > 0 && (
-          <span className="budget-reallocation">
-            Potential savings: {formatSpend(suggestedReallocation)}/day
-          </span>
-        )}
+        <div className="budget-header-right">
+          {lookbackSelector}
+          {suggestedReallocation > 0 && (
+            <span className="budget-reallocation">
+              Potential savings: {formatSpend(suggestedReallocation)}/day
+            </span>
+          )}
+        </div>
       </div>
 
-      {pauseCandidates.length > 0 && (
+      {loading && (
+        <div className="budget-loading">Recalculating for {days}-day window...</div>
+      )}
+
+      {!loading && pauseCandidates.length > 0 && (
         <div className="budget-list-section">
           <h3 className="budget-list-title budget-list-kill">Kill List</h3>
           <div className="budget-table-wrapper">
@@ -124,7 +198,7 @@ export function BudgetSection({
                 <tr>
                   <th></th>
                   <th>Ad</th>
-                  <th>Spend</th>
+                  <th>Spend/day</th>
                   <th>Tier</th>
                   <th>Action</th>
                   <th>Suggested</th>
@@ -167,7 +241,7 @@ export function BudgetSection({
         </div>
       )}
 
-      {scaleCandidates.length > 0 && (
+      {!loading && scaleCandidates.length > 0 && (
         <div className="budget-list-section">
           <h3 className="budget-list-title budget-list-scale">Scale List</h3>
           <div className="budget-table-wrapper">
@@ -176,7 +250,7 @@ export function BudgetSection({
                 <tr>
                   <th></th>
                   <th>Ad</th>
-                  <th>Spend</th>
+                  <th>Spend/day</th>
                   <th>Tier</th>
                   <th>Action</th>
                   <th>Suggested</th>

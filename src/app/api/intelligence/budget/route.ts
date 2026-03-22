@@ -20,7 +20,14 @@ import { type FreshnessState } from '@/lib/sync/freshness';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+const ALLOWED_DAYS = [1, 3, 5, 7] as const;
+
+export async function GET(request: Request) {
+  // Parse lookback days from query params
+  const { searchParams } = new URL(request.url);
+  const daysParam = Number(searchParams.get('days'));
+  const numDays = ALLOWED_DAYS.includes(daysParam as typeof ALLOWED_DAYS[number]) ? daysParam : 7;
+
   // Auth check
   const supabase = await createServerSupabaseClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -74,10 +81,9 @@ export async function GET() {
     // Build persistence adapter using RPC
     const persistence: BudgetPersistence = {
       async fetchEntitiesWithSpend(): Promise<BudgetEntityInput[]> {
-        const numDays = 7;
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - numDays);
-        const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - numDays);
+        const dateFrom = startDate.toISOString().slice(0, 10);
         const dateTo = new Date().toISOString().slice(0, 10);
 
         const { data, error } = await serviceClient.rpc('aggregate_entity_funnel', {
@@ -146,6 +152,7 @@ export async function GET() {
       data: result,
       meta: {
         suppressed: false,
+        days: numDays,
       },
     }), {
       headers: {
