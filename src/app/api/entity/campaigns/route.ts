@@ -26,5 +26,10 @@ export async function GET() {
     return Response.json({ error: "Failed to fetch campaigns" }, { status: 500 });
   }
 
-  return Response.json({ campaigns: data ?? [] });
+  return new Response(JSON.stringify({ campaigns: data ?? [] }), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
+    },
+  });
 }

@@ -52,10 +52,15 @@ export async function GET(
     // Strip source_payload to avoid leaking raw data (may contain PII hash etc.)
     const { source_payload: _sp, ...sessionData } = data;
 
-    return Response.json({
+    return new Response(JSON.stringify({
       data: {
         ...sessionData,
         duration_ms: durationMs,
+      },
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
       },
     });
   } catch (err) {

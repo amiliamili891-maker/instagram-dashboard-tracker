@@ -333,9 +333,14 @@ async function executeSyncForDateRange(
         .map((r) => r.campaign_id!),
     );
 
-    for (const campaignId of campaignIds) {
-      const filtered = await client.fetchStats({ campaign_id: campaignId });
-      filteredSummaries.set(`campaign:${campaignId}`, filtered.summary);
+    const campaignResults = await Promise.all(
+      Array.from(campaignIds).map(async (campaignId) => {
+        const filtered = await client.fetchStats({ campaign_id: campaignId });
+        return { campaignId, summary: filtered.summary };
+      }),
+    );
+    for (const { campaignId, summary } of campaignResults) {
+      filteredSummaries.set(`campaign:${campaignId}`, summary);
     }
 
     syncLogs.push(makeSyncLog(syncBatchId, 'stats_summaries', 'success', summaryStart, filteredSummaries.size, dateFrom));
@@ -382,10 +387,8 @@ async function executeSyncForDateRange(
     throw error;
   }
 
-  // ---- Persist sync logs ----
-  for (const log of syncLogs) {
-    await persistence.insertSyncLog(log);
-  }
+  // ---- Persist sync logs (batched) ----
+  await Promise.all(syncLogs.map((log) => persistence.insertSyncLog(log)));
 
   return {
     syncBatchId,

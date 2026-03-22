@@ -11,6 +11,7 @@
  */
 
 import { REPORTING_TIMEZONE } from '@/lib/contracts/data-contract';
+import { type SyncLogRow as FullSyncLogRow } from './types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,12 +32,8 @@ export interface FreshnessResult {
   evaluatedAt: string;
 }
 
-export interface SyncLogRow {
-  source: string;
-  status: string;
-  completed_at: string | null;
-  stage: string;
-}
+/** Freshness only needs a subset of the full SyncLogRow */
+export type SyncLogRow = Pick<FullSyncLogRow, 'source' | 'status' | 'completed_at' | 'stage'>;
 
 // ---------------------------------------------------------------------------
 // Window computation
@@ -156,23 +153,11 @@ export function computeFreshness(
   if (meta.completed && ghstly.completed) {
     state = 'fresh';
   } else if (meta.completed || ghstly.completed) {
-    // Only one source completed — but are we still within grace?
-    if (now <= graceDeadline) {
-      // Within grace, one source done = degraded (the other might still come)
-      state = 'degraded';
-    } else {
-      // Past grace, only one done = degraded
-      state = 'degraded';
-    }
+    // Only one source completed — degraded regardless of grace window
+    state = 'degraded';
   } else {
-    // Neither completed
-    if (now <= graceDeadline) {
-      // Within grace, neither done yet — still stale
-      state = 'stale';
-    } else {
-      // Past grace, neither done
-      state = 'stale';
-    }
+    // Neither completed — stale regardless of grace window
+    state = 'stale';
   }
 
   return {

@@ -69,69 +69,48 @@ export async function GET() {
       });
     }
 
-    // Build persistence adapter
+    // Build persistence adapter using RPC
     const persistence: MismatchPersistence = {
       async fetchEntitiesForMismatch(): Promise<MismatchEntityInput[]> {
-        // Get recent combined stats (last 7 days for meaningful aggregation)
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
         const dateTo = new Date().toISOString().slice(0, 10);
 
-        const { data, error } = await serviceClient
-          .from('daily_combined_stats')
-          .select('entity_id, entity_level, visits, chats, reveals, click_throughs')
-          .gte('report_date', dateFrom)
-          .lte('report_date', dateTo)
-          .eq('entity_level', 'ad');
+        const { data, error } = await serviceClient.rpc('aggregate_entity_funnel', {
+          date_from: dateFrom,
+          date_to: dateTo,
+        });
 
         if (error || !data) return [];
 
-        // Aggregate by entity
-        const entityMap = new Map<string, {
-          entityId: string;
-          entityLevel: 'campaign' | 'adset' | 'ad';
-          totalVisits: number;
-          totalChats: number;
-          totalReveals: number;
-          totalClickThroughs: number;
-        }>();
+        return (data as Array<{
+          entity_id: string;
+          entity_level: string;
+          spend: number;
+          visits: number;
+          chats: number;
+          reveals: number;
+          click_throughs: number;
+        }>).map((e) => {
+          const totalVisits = Number(e.visits);
+          const totalChats = Number(e.chats);
+          const totalReveals = Number(e.reveals);
+          const totalClickThroughs = Number(e.click_throughs);
 
-        for (const row of data) {
-          const key = `${row.entity_id}:${row.entity_level}`;
-          const existing = entityMap.get(key);
-          if (existing) {
-            existing.totalVisits += row.visits ?? 0;
-            existing.totalChats += row.chats ?? 0;
-            existing.totalReveals += row.reveals ?? 0;
-            existing.totalClickThroughs += row.click_throughs ?? 0;
-          } else {
-            entityMap.set(key, {
-              entityId: row.entity_id,
-              entityLevel: row.entity_level,
-              totalVisits: row.visits ?? 0,
-              totalChats: row.chats ?? 0,
-              totalReveals: row.reveals ?? 0,
-              totalClickThroughs: row.click_throughs ?? 0,
-            });
-          }
-        }
-
-        // Compute aggregated rates from totals
-        return Array.from(entityMap.values()).map((e) => {
-          const chatRate = e.totalVisits > 0 ? e.totalChats / e.totalVisits : null;
-          const revealRate = e.totalChats > 0 ? e.totalReveals / e.totalChats : null;
-          const revealClickThroughRate = e.totalReveals > 0
-            ? e.totalClickThroughs / e.totalReveals
+          const chatRate = totalVisits > 0 ? totalChats / totalVisits : null;
+          const revealRate = totalChats > 0 ? totalReveals / totalChats : null;
+          const revealClickThroughRate = totalReveals > 0
+            ? totalClickThroughs / totalReveals
             : null;
 
           return {
-            entityId: e.entityId,
-            entityLevel: e.entityLevel,
+            entityId: e.entity_id,
+            entityLevel: e.entity_level as 'campaign' | 'adset' | 'ad',
             chat_rate: chatRate,
             reveal_rate: revealRate,
             reveal_click_through_rate: revealClickThroughRate,
-            visits: e.totalVisits,
+            visits: totalVisits,
           };
         });
       },
@@ -158,10 +137,15 @@ export async function GET() {
       }
     }
 
-    return Response.json({
+    return new Response(JSON.stringify({
       data: result,
       meta: {
         suppressed: false,
+      },
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
       },
     });
   } catch (err) {

@@ -41,9 +41,14 @@ export async function GET(request: NextRequest) {
       .single(),
   ]);
 
-  return Response.json({
+  return new Response(JSON.stringify({
     ads: adsResult.data ?? [],
     adsets: adsetsResult.data ?? [],
     campaign_name: campaignResult.data?.name ?? campaignId,
+  }), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
+    },
   });
 }

@@ -12,6 +12,8 @@ import { getDateRanges, isValidPeriod } from "@/lib/date-utils";
 import { fmt } from "@/lib/format-utils";
 import { SparklineCell } from "@/components/sparkline-cell";
 import { TierBadge } from "@/components/tier-badge";
+import { useTableSort } from "@/hooks/use-table-sort";
+import { SortableTh } from "@/components/sortable-th";
 import type { TierLabel, TierColor } from "@/lib/intelligence/tier-classifier";
 
 interface CampaignRow {
@@ -138,30 +140,38 @@ export function CampaignList() {
       });
   }, [period]);
 
+  const { sortedRows, sortKey, sortDir, onSort } = useTableSort<CampaignRow, keyof CampaignRow>(
+    rows,
+    "spend",
+    "desc",
+  );
+
   if (loading) return <div className="table-loading">Loading campaigns...</div>;
   if (rows.length === 0) return <div className="table-empty">No campaigns found for this period.</div>;
+
+  const sortProps = { activeSortKey: sortKey as string, sortDir, onSort: onSort as (key: string) => void };
 
   return (
     <div className="table-wrapper">
       <table className="data-table">
         <thead>
           <tr>
-            <th>Campaign</th>
+            <SortableTh label="Campaign" sortKey="campaign_name" {...sortProps} />
             <th>Tier</th>
             <th>Cost/Chat Trend</th>
-            <th>Spend</th>
-            <th>Cost/Chat</th>
-            <th>Chat Rate</th>
-            <th>Reveal Rate</th>
-            <th>Chats</th>
-            <th>Visits</th>
-            <th>Reveals</th>
-            <th>Impressions</th>
-            <th>Clicks</th>
+            <SortableTh label="Spend" sortKey="spend" {...sortProps} />
+            <SortableTh label="Cost/Chat" sortKey="cost_per_chat" {...sortProps} />
+            <SortableTh label="Chat Rate" sortKey="chat_rate" {...sortProps} />
+            <SortableTh label="Reveal Rate" sortKey="reveal_rate" {...sortProps} />
+            <SortableTh label="Chats" sortKey="chats" {...sortProps} />
+            <SortableTh label="Visits" sortKey="visits" {...sortProps} />
+            <SortableTh label="Reveals" sortKey="reveals" {...sortProps} />
+            <SortableTh label="Impressions" sortKey="impressions" {...sortProps} />
+            <SortableTh label="Clicks" sortKey="clicks" {...sortProps} />
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
+          {sortedRows.map((row) => {
             const tierInfo = tiers.get(row.campaign_id);
             return (
               <tr key={row.campaign_id}>

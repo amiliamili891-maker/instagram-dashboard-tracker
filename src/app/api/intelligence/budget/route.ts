@@ -71,47 +71,46 @@ export async function GET() {
       });
     }
 
-    // Build persistence adapter
+    // Build persistence adapter using RPC
     const persistence: BudgetPersistence = {
       async fetchEntitiesWithSpend(): Promise<BudgetEntityInput[]> {
-        // Get recent combined stats (last 7 days for meaningful aggregation)
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
         const dateTo = new Date().toISOString().slice(0, 10);
 
-        const { data, error } = await serviceClient
-          .from('daily_combined_stats')
-          .select('entity_id, entity_level, spend, visits, chats, reveals, click_throughs, chat_rate, cost_per_chat, reveal_rate, freshness_state')
-          .gte('report_date', dateFrom)
-          .lte('report_date', dateTo)
-          .eq('entity_level', 'ad');
+        const { data, error } = await serviceClient.rpc('aggregate_entity_funnel', {
+          date_from: dateFrom,
+          date_to: dateTo,
+        });
 
         if (error || !data) return [];
 
-        // Aggregate by entity
-        const entityMap = new Map<string, BudgetEntityInput>();
-        for (const row of data) {
-          const key = `${row.entity_id}:${row.entity_level}`;
-          const existing = entityMap.get(key);
-          if (existing) {
-            existing.spend += row.spend ?? 0;
-            existing.visits += row.visits ?? 0;
-          } else {
-            entityMap.set(key, {
-              entityId: row.entity_id,
-              entityLevel: row.entity_level,
-              spend: row.spend ?? 0,
-              visits: row.visits ?? 0,
-              chat_rate: row.chat_rate,
-              cost_per_chat: row.cost_per_chat,
-              reveal_rate: row.reveal_rate,
-              freshnessState: row.freshness_state as FreshnessState | null,
-            });
-          }
-        }
+        return (data as Array<{
+          entity_id: string;
+          entity_level: string;
+          spend: number;
+          visits: number;
+          chats: number;
+          reveals: number;
+          click_throughs: number;
+        }>).map((row) => {
+          const spend = Number(row.spend);
+          const visits = Number(row.visits);
+          const chats = Number(row.chats);
+          const reveals = Number(row.reveals);
 
-        return Array.from(entityMap.values());
+          return {
+            entityId: row.entity_id,
+            entityLevel: row.entity_level as 'campaign' | 'adset' | 'ad',
+            spend,
+            visits,
+            chat_rate: visits > 0 ? chats / visits : null,
+            cost_per_chat: chats > 0 ? spend / chats : null,
+            reveal_rate: chats > 0 ? reveals / chats : null,
+            freshnessState: null,
+          };
+        });
       },
     };
 
@@ -142,10 +141,15 @@ export async function GET() {
       }
     }
 
-    return Response.json({
+    return new Response(JSON.stringify({
       data: result,
       meta: {
         suppressed: false,
+      },
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
       },
     });
   } catch (err) {

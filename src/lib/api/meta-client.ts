@@ -7,6 +7,15 @@
  * All numeric IDs are stored as strings (19-digit safe).
  */
 
+import {
+  MetaCampaignRowSchema,
+  MetaAdsetRowSchema,
+  MetaAdRowSchema,
+  MetaInsightRowSchema,
+  validateApiResponse,
+} from '@/lib/contracts/api-schemas';
+import { z } from 'zod';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -179,7 +188,7 @@ export function createMetaClient(config: MetaClientConfig) {
   // ------------------------------------------------------------------
 
   async function fetchCampaigns(): Promise<MetaCampaignRow[]> {
-    return fetchAllPages<MetaCampaignRow>(
+    const data = await fetchAllPages<MetaCampaignRow>(
       `${BASE_URL}/${accountId}/campaigns`,
       {
         fields:
@@ -187,10 +196,11 @@ export function createMetaClient(config: MetaClientConfig) {
         limit: "200",
       },
     );
+    return validateApiResponse(z.array(MetaCampaignRowSchema), data, 'Meta /campaigns');
   }
 
   async function fetchAdsets(): Promise<MetaAdsetRow[]> {
-    return fetchAllPages<MetaAdsetRow>(
+    const data = await fetchAllPages<MetaAdsetRow>(
       `${BASE_URL}/${accountId}/adsets`,
       {
         fields:
@@ -198,10 +208,11 @@ export function createMetaClient(config: MetaClientConfig) {
         limit: "200",
       },
     );
+    return validateApiResponse(z.array(MetaAdsetRowSchema), data, 'Meta /adsets');
   }
 
   async function fetchAds(): Promise<MetaAdRow[]> {
-    return fetchAllPages<MetaAdRow>(
+    const data = await fetchAllPages<MetaAdRow>(
       `${BASE_URL}/${accountId}/ads`,
       {
         fields:
@@ -209,6 +220,7 @@ export function createMetaClient(config: MetaClientConfig) {
         limit: "200",
       },
     );
+    return validateApiResponse(z.array(MetaAdRowSchema), data, 'Meta /ads');
   }
 
   // ------------------------------------------------------------------
@@ -240,7 +252,7 @@ export function createMetaClient(config: MetaClientConfig) {
     level: MetaInsightLevel,
     dateRange: MetaDateRange,
   ): Promise<MetaInsightRow[]> {
-    return fetchAllPages<MetaInsightRow>(
+    const data = await fetchAllPages<MetaInsightRow>(
       `${BASE_URL}/${accountId}/insights`,
       {
         fields: INSIGHT_FIELDS,
@@ -253,6 +265,7 @@ export function createMetaClient(config: MetaClientConfig) {
         limit: "200",
       },
     );
+    return validateApiResponse(z.array(MetaInsightRowSchema), data, 'Meta /insights');
   }
 
   return {

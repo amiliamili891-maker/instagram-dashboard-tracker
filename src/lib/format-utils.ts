@@ -32,6 +32,30 @@ export function fmt(value: number | null | undefined, type: "currency" | "percen
   return value.toLocaleString();
 }
 
+// --- Timestamp formatting ---
+
+export function formatTimestamp(
+  iso: string | null | undefined,
+  opts?: { fallback?: string; includeSeconds?: boolean; includeYear?: boolean },
+): string {
+  const fallback = opts?.fallback ?? "-";
+  if (!iso) return fallback;
+  try {
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: "America/Los_Angeles",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    };
+    if (opts?.includeYear) options.year = "numeric";
+    if (opts?.includeSeconds) options.second = "2-digit";
+    return new Date(iso).toLocaleString("en-US", options);
+  } catch {
+    return iso;
+  }
+}
+
 // --- Safe division ---
 
 export function safeDivide(numerator: number | null | undefined, denominator: number | null | undefined): number | null {

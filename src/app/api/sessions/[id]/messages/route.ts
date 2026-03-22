@@ -34,12 +34,17 @@ export async function GET(
     .order('message_index', { ascending: true });
 
   if (!cacheError && cached && cached.length > 0) {
-    return Response.json({
+    return new Response(JSON.stringify({
       data: {
         session_id: id,
         messages: cached,
         cached: true,
         message_count: cached.length,
+      },
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
       },
     });
   }
@@ -49,12 +54,17 @@ export async function GET(
     const ghstlyClient = GhstlyClient.fromEnv();
     const messages = await fetchAndStoreMessages(supabase, ghstlyClient, id);
 
-    return Response.json({
+    return new Response(JSON.stringify({
       data: {
         session_id: id,
         messages,
         cached: false,
         message_count: messages.length,
+      },
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
       },
     });
   } catch (err) {

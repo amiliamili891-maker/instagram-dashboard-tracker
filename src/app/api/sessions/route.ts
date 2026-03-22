@@ -97,13 +97,18 @@ export async function GET(request: NextRequest) {
 
     const totalCount = count ?? 0;
 
-    return Response.json({
+    return new Response(JSON.stringify({
       data: data ?? [],
       meta: {
         page,
         limit,
         total: totalCount,
         total_pages: Math.ceil(totalCount / limit),
+      },
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
       },
     });
   } catch (err) {

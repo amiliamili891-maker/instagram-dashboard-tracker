@@ -4,14 +4,17 @@
  * Joins daily_meta_stats and daily_ghstly_stats on (entity_id, report_date, entity_level)
  * for joinable rows only. Materializes results into daily_combined_stats.
  *
- * Only publishes batches where Meta and Ghstly data are aligned to the same sync window
- * (validated via sync_batch_id timestamps from sync_logs).
+ * Batch alignment is guaranteed by the orchestrator — both sources are synced
+ * in the same orchestrator run, so cross-batch drift checks are unnecessary.
  *
  * Source-of-truth rules:
  *   - Meta campaign/adset unique_clicks from same-grain Meta insights
  *   - Ghstly campaign/adset totals from filtered /stats summary
  *   - Division by zero returns null, not error
  */
+
+import { safeDivide } from '@/lib/format-utils';
+import { type SyncLogRow, type DateRange } from './types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,20 +93,8 @@ export interface CombinedStatsRow {
   freshness_state: 'fresh' | 'degraded' | 'stale' | null;
 }
 
-/** Sync log row for batch alignment check */
-export interface SyncLogRow {
-  sync_batch_id: string;
-  source: string;
-  status: string;
-  started_at: string;
-  completed_at: string | null;
-}
-
-/** Date range for materialization */
-export interface DateRange {
-  from: string;
-  to: string;
-}
+// SyncLogRow and DateRange imported from ./types
+export type { SyncLogRow, DateRange } from './types';
 
 /** Result of a materialization run */
 export interface MaterializeResult {
@@ -122,22 +113,8 @@ export interface CombinePersistence {
   upsertCombinedStats(rows: CombinedStatsRow[]): Promise<number>;
 }
 
-// ---------------------------------------------------------------------------
-// Safe Division Helper
-// ---------------------------------------------------------------------------
-
-/**
- * Safely divide numerator by denominator, returning null for zero denominator.
- */
-export function safeDivide(
-  numerator: number | null,
-  denominator: number | null,
-): number | null {
-  if (numerator === null || denominator === null || denominator === 0) {
-    return null;
-  }
-  return numerator / denominator;
-}
+// safeDivide imported from @/lib/format-utils (canonical location)
+export { safeDivide } from '@/lib/format-utils';
 
 // ---------------------------------------------------------------------------
 // Derived Metric Computation
@@ -340,39 +317,6 @@ function buildJoinKey(
   entityLevel: string,
 ): string {
   return `${entityId}:${reportDate}:${entityLevel}`;
-}
-
-// ---------------------------------------------------------------------------
-// Batch Alignment
-// ---------------------------------------------------------------------------
-
-/**
- * Check if Meta and Ghstly batches are aligned to the same sync window.
- * Batches are aligned if their most recent successful sync_logs completed
- * within 6 hours of each other.
- */
-export function areBatchesAligned(
-  metaLogs: SyncLogRow[],
-  ghstlyLogs: SyncLogRow[],
-  maxDriftMs: number = 6 * 60 * 60 * 1000,
-): boolean {
-  const latestMeta = metaLogs
-    .filter((l) => l.status === 'success' && l.completed_at)
-    .sort((a, b) => new Date(b.completed_at!).getTime() - new Date(a.completed_at!).getTime())[0];
-
-  const latestGhstly = ghstlyLogs
-    .filter((l) => l.status === 'success' && l.completed_at)
-    .sort((a, b) => new Date(b.completed_at!).getTime() - new Date(a.completed_at!).getTime())[0];
-
-  if (!latestMeta || !latestGhstly) {
-    return false;
-  }
-
-  const metaTime = new Date(latestMeta.completed_at!).getTime();
-  const ghstlyTime = new Date(latestGhstly.completed_at!).getTime();
-  const drift = Math.abs(metaTime - ghstlyTime);
-
-  return drift <= maxDriftMs;
 }
 
 // ---------------------------------------------------------------------------

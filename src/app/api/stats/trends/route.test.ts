@@ -3,9 +3,9 @@
  *
  * Covers:
  *   - Parameter validation (missing/invalid metric, dates)
- *   - Cross-source metric suppression in degraded/stale states
- *   - Rate metric aggregation (average vs sum)
- *   - Comparison mode
+ *   - RPC-based aggregation for unfiltered queries
+ *   - Cross-source metric suppression in degraded/stale states (entity-filtered path)
+ *   - Rate metric aggregation via entity-filtered fallback
  *   - Auth guard
  */
 
@@ -13,7 +13,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock dependencies before importing the route
 const mockRequireAdminUser = vi.fn();
-const mockFrom = vi.fn();
 const mockCreateClient = vi.fn();
 
 vi.mock('@/lib/auth/guards', () => ({
@@ -90,34 +89,17 @@ describe('GET /api/stats/trends', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns trend data for valid params', async () => {
-    const mockSelect = vi.fn().mockReturnThis();
-    const mockGte = vi.fn().mockReturnThis();
-    const mockLte = vi.fn().mockReturnThis();
-    const mockOrder = vi.fn().mockReturnThis();
-    const mockEq = vi.fn().mockReturnThis();
-
-    // Simulate query chain that resolves
-    const queryChain = {
-      select: mockSelect,
-      gte: mockGte,
-      lte: mockLte,
-      order: mockOrder,
-      eq: mockEq,
-    };
-
-    // Make the last call in the chain resolve data
-    mockOrder.mockResolvedValue({
+  it('returns trend data via RPC for unfiltered queries', async () => {
+    const mockRpc = vi.fn().mockResolvedValue({
       data: [
-        { report_date: '2026-03-01', spend: 50.00, freshness_state: 'fresh' },
-        { report_date: '2026-03-01', spend: 30.00, freshness_state: 'fresh' },
-        { report_date: '2026-03-02', spend: 100.00, freshness_state: 'fresh' },
+        { report_date: '2026-03-01', metric_value: 80 },
+        { report_date: '2026-03-02', metric_value: 100 },
       ],
       error: null,
     });
 
     mockCreateClient.mockReturnValue({
-      from: () => queryChain,
+      rpc: mockRpc,
     });
 
     const res = await GET(makeRequest({
@@ -129,28 +111,38 @@ describe('GET /api/stats/trends', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data).toHaveLength(2);
-    // Spend is additive, so 50 + 30 = 80 for 2026-03-01
     expect(body.data[0]).toEqual({ date: '2026-03-01', value: 80 });
     expect(body.data[1]).toEqual({ date: '2026-03-02', value: 100 });
     expect(body.meta.metric).toBe('spend');
     expect(body.meta.is_cross_source).toBe(false);
+
+    // Verify RPC was called with correct params
+    expect(mockRpc).toHaveBeenCalledWith('aggregate_trends', {
+      date_from: '2026-03-01',
+      date_to: '2026-03-07',
+      metric_name: 'spend',
+    });
   });
 
-  it('suppresses cross-source metrics in degraded state', async () => {
-    const queryChain = {
-      select: vi.fn().mockReturnThis(),
-      gte: vi.fn().mockReturnThis(),
-      lte: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-    };
-
-    queryChain.order.mockResolvedValue({
+  it('suppresses cross-source metrics in degraded state (entity-filtered path)', async () => {
+    const resolvedData = {
       data: [
         { report_date: '2026-03-01', cost_per_chat: 2.50, freshness_state: 'degraded' },
       ],
       error: null,
-    });
+    };
+
+    // eq() is called twice: .eq('entity_level', 'ad').eq('entity_id', 'ad_123')
+    // First call returns chain, second resolves data
+    const mockEq = vi.fn()
+      .mockReturnValueOnce({ eq: vi.fn().mockResolvedValue(resolvedData) } as any)
+
+    const queryChain = {
+      select: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      lte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnValue({ eq: mockEq }),
+    };
 
     mockCreateClient.mockReturnValue({
       from: () => queryChain,
@@ -160,6 +152,7 @@ describe('GET /api/stats/trends', () => {
       metric: 'cost_per_chat',
       date_from: '2026-03-01',
       date_to: '2026-03-07',
+      ad_id: 'ad_123', // entity filter to use fallback path
     }));
 
     expect(res.status).toBe(200);
@@ -168,22 +161,25 @@ describe('GET /api/stats/trends', () => {
     expect(body.meta.is_cross_source).toBe(true);
   });
 
-  it('averages rate metrics instead of summing', async () => {
-    const queryChain = {
-      select: vi.fn().mockReturnThis(),
-      gte: vi.fn().mockReturnThis(),
-      lte: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-    };
-
-    queryChain.order.mockResolvedValue({
+  it('averages rate metrics instead of summing (entity-filtered path)', async () => {
+    const resolvedData = {
       data: [
         { report_date: '2026-03-01', ctr: 0.02, freshness_state: 'fresh' },
         { report_date: '2026-03-01', ctr: 0.04, freshness_state: 'fresh' },
       ],
       error: null,
-    });
+    };
+
+    // eq() is called twice: .eq('entity_level', 'ad').eq('entity_id', 'ad_123')
+    const mockEq = vi.fn()
+      .mockReturnValueOnce({ eq: vi.fn().mockResolvedValue(resolvedData) } as any);
+
+    const queryChain = {
+      select: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      lte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnValue({ eq: mockEq }),
+    };
 
     mockCreateClient.mockReturnValue({
       from: () => queryChain,
@@ -193,11 +189,29 @@ describe('GET /api/stats/trends', () => {
       metric: 'ctr',
       date_from: '2026-03-01',
       date_to: '2026-03-07',
+      ad_id: 'ad_123', // entity filter to use fallback path
     }));
 
     expect(res.status).toBe(200);
     const body = await res.json();
     // Average of 0.02 and 0.04 = 0.03
     expect(body.data[0].value).toBeCloseTo(0.03);
+  });
+
+  it('handles RPC errors gracefully', async () => {
+    mockCreateClient.mockReturnValue({
+      rpc: vi.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'RPC function not found' },
+      }),
+    });
+
+    const res = await GET(makeRequest({
+      metric: 'spend',
+      date_from: '2026-03-01',
+      date_to: '2026-03-07',
+    }));
+
+    expect(res.status).toBe(500);
   });
 });

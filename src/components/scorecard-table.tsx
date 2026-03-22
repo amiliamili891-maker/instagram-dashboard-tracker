@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ImageLightbox } from "@/components/image-lightbox";
 import { fmt } from "@/lib/format-utils";
+import { useTableSort } from "@/hooks/use-table-sort";
+import { SortableTh } from "@/components/sortable-th";
 
-interface AdRow {
+export interface AdRow {
   entity_id: string;
   ad_name: string;
   campaign_name: string;
@@ -27,64 +27,18 @@ interface AdRow {
   thumbnail_url?: string;
 }
 
-export function ScorecardTable() {
-  const searchParams = useSearchParams();
-  const period = searchParams.get("period") || "7d";
-  const [rows, setRows] = useState<AdRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    fetch(`/api/stats/scorecard?period=${period}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load scorecard");
-        return r.json();
-      })
-      .then((data) => {
-        const loadedRows: AdRow[] = data.rows ?? [];
-        setRows(loadedRows);
-        setLoading(false);
-
-        // Batch fetch thumbnails
-        if (loadedRows.length > 0) {
-          const adIds = loadedRows.map((r) => r.entity_id).join(",");
-          fetch(`/api/storage/thumbnails?ad_ids=${adIds}`)
-            .then((r) => r.json())
-            .then((thumbData) => {
-              const thumbnails: Record<string, string> = thumbData.thumbnails ?? {};
-              setRows((prev) =>
-                prev.map((row) => ({
-                  ...row,
-                  thumbnail_url: thumbnails[row.entity_id],
-                })),
-              );
-            })
-            .catch(() => {}); // Non-fatal
-        }
-      })
-      .catch((err) => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, [period]);
-
-  if (loading) {
-    return (
-      <div className="scorecard-loading">
-        <p>Loading scorecard...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="scorecard-error">
-        <p>Error: {error}</p>
-      </div>
-    );
-  }
+export function ScorecardTable({
+  rows,
+  period,
+}: {
+  rows: AdRow[];
+  period: string;
+}) {
+  const { sortedRows, sortKey, sortDir, onSort } = useTableSort<AdRow, keyof AdRow>(
+    rows,
+    "cost_per_chat",
+    "asc",
+  );
 
   if (rows.length === 0) {
     return (
@@ -94,29 +48,31 @@ export function ScorecardTable() {
     );
   }
 
+  const sortProps = { activeSortKey: sortKey as string, sortDir, onSort: onSort as (key: string) => void };
+
   return (
     <div className="scorecard-wrapper">
       <table className="scorecard-table">
         <thead>
           <tr>
-            <th>#</th>
-            <th></th>
-            <th>Ad</th>
-            <th>Campaign</th>
-            <th>Adset</th>
-            <th>Spend</th>
-            <th>Cost/Chat</th>
-            <th>Chat Rate</th>
-            <th>Reveal Rate</th>
-            <th>Chats</th>
-            <th>Visits</th>
-            <th>Reveals</th>
-            <th>Impressions</th>
-            <th>Clicks</th>
+            <th scope="col">#</th>
+            <th scope="col"></th>
+            <SortableTh label="Ad" sortKey="ad_name" {...sortProps} />
+            <SortableTh label="Campaign" sortKey="campaign_name" {...sortProps} />
+            <SortableTh label="Adset" sortKey="adset_name" {...sortProps} />
+            <SortableTh label="Spend" sortKey="spend" {...sortProps} />
+            <SortableTh label="Cost/Chat" sortKey="cost_per_chat" {...sortProps} />
+            <SortableTh label="Chat Rate" sortKey="chat_rate" {...sortProps} />
+            <SortableTh label="Reveal Rate" sortKey="reveal_rate" {...sortProps} />
+            <SortableTh label="Chats" sortKey="chats" {...sortProps} />
+            <SortableTh label="Visits" sortKey="visits" {...sortProps} />
+            <SortableTh label="Reveals" sortKey="reveals" {...sortProps} />
+            <SortableTh label="Impressions" sortKey="impressions" {...sortProps} />
+            <SortableTh label="Clicks" sortKey="clicks" {...sortProps} />
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, idx) => (
+          {sortedRows.map((row, idx) => (
             <tr
               key={row.entity_id}
               className={row.insufficient_data ? "row-insufficient" : ""}

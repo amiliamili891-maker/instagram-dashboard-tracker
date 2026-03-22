@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/geo", label: "Geo" },
   { href: "/dashboard/sessions", label: "Sessions" },
   { href: "/dashboard/intelligence", label: "Intelligence" },
+  { href: "/dashboard/docs", label: "Docs" },
   { href: "/dashboard/sync", label: "Sync" },
 ];
 
@@ -31,6 +32,7 @@ export function NavLinks() {
             key={item.href}
             href={`${item.href}${qs}`}
             className={`nav-link ${isActive ? "nav-link-active" : ""}`}
+            aria-current={isActive ? "page" : undefined}
           >
             {item.label}
           </Link>

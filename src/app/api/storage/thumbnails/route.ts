@@ -58,5 +58,10 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return Response.json({ thumbnails: result });
+  return new Response(JSON.stringify({ thumbnails: result }), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
+    },
+  });
 }

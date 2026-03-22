@@ -16,13 +16,15 @@ export function TimeSelector() {
   }
 
   return (
-    <div className="time-selector">
+    <div className="time-selector" role="radiogroup" aria-label="Time period">
       {PERIOD_OPTIONS.map((opt) => (
         <button
           key={opt.value}
           className={`time-btn ${currentPeriod === opt.value ? "time-btn-active" : ""}`}
           onClick={() => handleChange(opt.value)}
           type="button"
+          role="radio"
+          aria-checked={currentPeriod === opt.value}
         >
           {opt.label}
         </button>

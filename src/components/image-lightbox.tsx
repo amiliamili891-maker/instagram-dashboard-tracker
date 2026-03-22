@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AdThumbnail } from "@/components/ad-thumbnail";
 
 interface ImageLightboxProps {
@@ -21,7 +21,12 @@ export function ImageLightbox({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocusedRef = useRef<Element | null>(null);
+
   const openLightbox = useCallback(() => {
+    previouslyFocusedRef.current = document.activeElement;
     setIsOpen(true);
     setLoading(true);
     setError(false);
@@ -44,15 +49,41 @@ export function ImageLightbox({
   const closeLightbox = useCallback(() => {
     setIsOpen(false);
     setFullUrl(null);
+
+    // Restore focus to the element that opened the lightbox
+    const prev = previouslyFocusedRef.current;
+    if (prev && prev instanceof HTMLElement) {
+      // Use requestAnimationFrame to ensure the DOM has updated
+      requestAnimationFrame(() => prev.focus());
+    }
   }, []);
 
-  // Close on Escape key
+  // Focus the close button when lightbox opens
+  useEffect(() => {
+    if (isOpen && closeButtonRef.current) {
+      closeButtonRef.current.focus();
+    }
+  }, [isOpen]);
+
+  // Handle Escape key and focus trap
   useEffect(() => {
     if (!isOpen) return;
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         closeLightbox();
+        return;
+      }
+
+      // Focus trap: cycle Tab/Shift+Tab within the dialog
+      if (e.key === "Tab") {
+        const closeBtn = closeButtonRef.current;
+        if (!closeBtn) return;
+
+        // The only focusable element in the dialog is the close button.
+        // Trap focus on it regardless of Tab direction.
+        e.preventDefault();
+        closeBtn.focus();
       }
     }
 
@@ -75,6 +106,7 @@ export function ImageLightbox({
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={openLightbox}
         style={{
@@ -106,6 +138,7 @@ export function ImageLightbox({
           }}
         >
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={closeLightbox}
             aria-label="Close lightbox"

@@ -1,9 +1,11 @@
-"use client";
+/**
+ * Overview Alerts — Server component that renders intelligence alerts.
+ * Data is fetched by the page and passed as props.
+ */
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 
-interface AlertRow {
+export interface AlertRow {
   id: string;
   entity_type: string;
   entity_id: string;
@@ -15,47 +17,7 @@ interface AlertRow {
   created_at: string;
 }
 
-export function OverviewAlerts() {
-  const [alerts, setAlerts] = useState<AlertRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/intelligence/alerts?limit=5")
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed");
-        return r.json();
-      })
-      .then((json) => {
-        setAlerts(json.data ?? []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError(true);
-        setLoading(false);
-      });
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="overview-alerts">
-        <h2 className="section-title">Intelligence Alerts</h2>
-        <div className="overview-alerts-loading">Loading alerts...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="overview-alerts">
-        <h2 className="section-title">Intelligence Alerts</h2>
-        <div className="overview-alerts-empty">
-          Unable to load alerts.
-        </div>
-      </div>
-    );
-  }
-
+export function OverviewAlerts({ alerts }: { alerts: AlertRow[] }) {
   if (alerts.length === 0) {
     return (
       <div className="overview-alerts">

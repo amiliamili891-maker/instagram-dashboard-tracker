@@ -8,6 +8,7 @@
  */
 
 import { createServiceClient } from '@/lib/supabase/service';
+import { formatTimestamp as formatTimestampBase } from '@/lib/format-utils';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { TranscriptPanel } from './TranscriptPanel';
@@ -15,20 +16,7 @@ import { TranscriptPanel } from './TranscriptPanel';
 export const dynamic = 'force-dynamic';
 
 function formatTimestamp(iso: string | null | undefined): string {
-  if (!iso) return '-';
-  try {
-    return new Date(iso).toLocaleString('en-US', {
-      timeZone: 'America/Los_Angeles',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
+  return formatTimestampBase(iso, { includeYear: true, includeSeconds: true });
 }
 
 function formatDuration(ms: number | null): string {

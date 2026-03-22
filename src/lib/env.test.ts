@@ -10,6 +10,7 @@ const VALID_ENV = {
   META_ACCESS_TOKEN: "EAAtoken123",
   META_AD_ACCOUNT_ID: "act_123456789",
   GHSTLY_PARTNER_API_KEY: "pk-test123",
+  GHSTLY_PARTNER_API_URL: "https://ghstly.chat/api/partner",
 };
 
 describe("parseServerEnv", () => {
@@ -24,6 +25,7 @@ describe("parseServerEnv", () => {
       metaAccessToken: "EAAtoken123",
       metaAdAccountId: "act_123456789",
       ghstlyPartnerApiKey: "pk-test123",
+      ghstlyPartnerApiUrl: "https://ghstly.chat/api/partner",
     });
   });
 

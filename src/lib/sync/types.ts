@@ -22,3 +22,22 @@ export interface SyncLogEntry {
   sync_type?: string;
   triggered_by?: string;
 }
+
+/**
+ * Comprehensive sync_logs row — superset of all fields used across modules.
+ * Modules that only need a subset should use Pick<SyncLogRow, ...>.
+ */
+export interface SyncLogRow {
+  sync_batch_id: string;
+  source: string;
+  stage: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+}
+
+/** Date range used across sync modules (combine, reconciliation, etc.) */
+export interface DateRange {
+  from: string;
+  to: string;
+}

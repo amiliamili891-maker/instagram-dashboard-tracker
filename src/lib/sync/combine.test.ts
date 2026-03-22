@@ -19,7 +19,6 @@ import {
   buildJoinedRow,
   buildMetaOnlyRow,
   buildGhstlyOnlyRow,
-  areBatchesAligned,
   materializeCombinedStats,
   type MetaStatsRow,
   type GhstlyStatsRow,
@@ -77,6 +76,7 @@ function makeSyncLog(overrides: Partial<SyncLogRow> = {}): SyncLogRow {
   return {
     sync_batch_id: 'batch-001',
     source: 'meta',
+    stage: 'persist',
     status: 'success',
     started_at: '2026-03-20T10:00:00.000Z',
     completed_at: '2026-03-20T10:05:00.000Z',
@@ -383,69 +383,7 @@ describe('buildGhstlyOnlyRow', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// areBatchesAligned
-// ---------------------------------------------------------------------------
-
-describe('areBatchesAligned', () => {
-  it('returns true when batches completed within 6 hours', () => {
-    const metaLogs = [
-      makeSyncLog({ source: 'meta', completed_at: '2026-03-20T10:00:00.000Z' }),
-    ];
-    const ghstlyLogs = [
-      makeSyncLog({ source: 'ghstly', completed_at: '2026-03-20T12:00:00.000Z' }),
-    ];
-    expect(areBatchesAligned(metaLogs, ghstlyLogs)).toBe(true);
-  });
-
-  it('returns false when batches are more than 6 hours apart', () => {
-    const metaLogs = [
-      makeSyncLog({ source: 'meta', completed_at: '2026-03-20T01:00:00.000Z' }),
-    ];
-    const ghstlyLogs = [
-      makeSyncLog({ source: 'ghstly', completed_at: '2026-03-20T10:00:00.000Z' }),
-    ];
-    expect(areBatchesAligned(metaLogs, ghstlyLogs)).toBe(false);
-  });
-
-  it('returns false when Meta logs are missing', () => {
-    expect(areBatchesAligned([], [makeSyncLog({ source: 'ghstly' })])).toBe(false);
-  });
-
-  it('returns false when Ghstly logs are missing', () => {
-    expect(areBatchesAligned([makeSyncLog({ source: 'meta' })], [])).toBe(false);
-  });
-
-  it('returns false when no successful logs exist', () => {
-    const metaLogs = [makeSyncLog({ source: 'meta', status: 'failed' })];
-    const ghstlyLogs = [makeSyncLog({ source: 'ghstly', status: 'failed' })];
-    expect(areBatchesAligned(metaLogs, ghstlyLogs)).toBe(false);
-  });
-
-  it('uses the most recent successful log for each source', () => {
-    const metaLogs = [
-      makeSyncLog({ source: 'meta', completed_at: '2026-03-20T01:00:00.000Z' }),
-      makeSyncLog({ source: 'meta', completed_at: '2026-03-20T10:00:00.000Z' }),
-    ];
-    const ghstlyLogs = [
-      makeSyncLog({ source: 'ghstly', completed_at: '2026-03-20T11:00:00.000Z' }),
-    ];
-    expect(areBatchesAligned(metaLogs, ghstlyLogs)).toBe(true);
-  });
-
-  it('allows custom max drift window', () => {
-    const metaLogs = [
-      makeSyncLog({ source: 'meta', completed_at: '2026-03-20T10:00:00.000Z' }),
-    ];
-    const ghstlyLogs = [
-      makeSyncLog({ source: 'ghstly', completed_at: '2026-03-20T10:30:00.000Z' }),
-    ];
-    // 30 minutes apart, 1-hour window
-    expect(areBatchesAligned(metaLogs, ghstlyLogs, 60 * 60 * 1000)).toBe(true);
-    // 30 minutes apart, 10-minute window
-    expect(areBatchesAligned(metaLogs, ghstlyLogs, 10 * 60 * 1000)).toBe(false);
-  });
-});
+// areBatchesAligned — removed (dead code: alignment is guaranteed by the orchestrator)
 
 // ---------------------------------------------------------------------------
 // materializeCombinedStats — full flow

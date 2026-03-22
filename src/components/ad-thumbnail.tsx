@@ -67,7 +67,7 @@ export function AdThumbnail({ adId, signedUrl, size = "sm", onClick }: AdThumbna
         onClick={onClick}
         role={onClick ? "button" : undefined}
       >
-        <span className="ad-thumbnail-icon">&#x1F4F7;</span>
+        <span className="ad-thumbnail-icon" aria-hidden="true">&#x1F4F7;</span>
       </div>
     );
   }

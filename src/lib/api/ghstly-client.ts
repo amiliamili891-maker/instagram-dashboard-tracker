@@ -16,6 +16,13 @@ import type {
   GhstlyStatsDailyResponse,
   GhstlySessionsResponse,
 } from '@/lib/contracts/data-contract';
+import {
+  GhstlyStatsResponseSchema,
+  GhstlyStatsDailyResponseSchema,
+  GhstlySessionsResponseSchema,
+  GhstlySessionMessagesResponseSchema,
+  validateApiResponse,
+} from '@/lib/contracts/api-schemas';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,7 +93,10 @@ export class GhstlyClient {
     if (!apiKey) {
       throw new Error('Missing required environment variable: GHSTLY_PARTNER_API_KEY');
     }
-    const baseUrl = process.env.GHSTLY_PARTNER_API_URL?.trim() || 'http://148.251.46.108:8400/api/partner';
+    const baseUrl = process.env.GHSTLY_PARTNER_API_URL?.trim();
+    if (!baseUrl) {
+      throw new Error('Missing required environment variable: GHSTLY_PARTNER_API_URL');
+    }
     return new GhstlyClient({
       baseUrl,
       apiKey,
@@ -141,13 +151,14 @@ export class GhstlyClient {
    * Filtered calls return exact campaign/adset range totals in `summary`.
    */
   async fetchStats(filters?: GhstlyStatsFilters): Promise<GhstlyStatsResponse> {
-    return this.request<GhstlyStatsResponse>('/stats', {
+    const data = await this.request<GhstlyStatsResponse>('/stats', {
       start_date: filters?.start_date,
       finish_date: filters?.finish_date,
       campaign_id: filters?.campaign_id,
       adset_id: filters?.adset_id,
       ad_id: filters?.ad_id,
     });
+    return validateApiResponse(GhstlyStatsResponseSchema, data, 'Ghstly /stats');
   }
 
   /**
@@ -156,12 +167,13 @@ export class GhstlyClient {
    * NOTE: group_by and level params are ignored by the API per live verification.
    */
   async fetchStatsDaily(filters?: GhstlyStatsDailyFilters): Promise<GhstlyStatsDailyResponse> {
-    return this.request<GhstlyStatsDailyResponse>('/stats/daily', {
+    const data = await this.request<GhstlyStatsDailyResponse>('/stats/daily', {
       start_date: filters?.start_date,
       finish_date: filters?.finish_date,
       campaign_id: filters?.campaign_id,
       adset_id: filters?.adset_id,
     });
+    return validateApiResponse(GhstlyStatsDailyResponseSchema, data, 'Ghstly /stats/daily');
   }
 
   /**
@@ -169,20 +181,22 @@ export class GhstlyClient {
    * Default limit is 100, max offset for pagination.
    */
   async fetchSessions(params?: GhstlySessionsParams): Promise<GhstlySessionsResponse> {
-    return this.request<GhstlySessionsResponse>('/sessions', {
+    const data = await this.request<GhstlySessionsResponse>('/sessions', {
       limit: params?.limit,
       offset: params?.offset,
       campaign: params?.campaign,
       start_date: params?.start_date,
       finish_date: params?.finish_date,
     });
+    return validateApiResponse(GhstlySessionsResponseSchema, data, 'Ghstly /sessions');
   }
 
   /**
    * GET /sessions/:id/messages — session transcript.
    */
   async fetchSessionMessages(sessionId: string): Promise<GhstlySessionMessagesResponse> {
-    return this.request<GhstlySessionMessagesResponse>(`/sessions/${sessionId}/messages`);
+    const data = await this.request<GhstlySessionMessagesResponse>(`/sessions/${sessionId}/messages`);
+    return validateApiResponse(GhstlySessionMessagesResponseSchema, data, 'Ghstly /sessions/:id/messages');
   }
 }
 

@@ -8,6 +8,7 @@
  */
 
 import { createServiceClient } from '@/lib/supabase/service';
+import { formatTimestamp as formatTimestampBase } from '@/lib/format-utils';
 import { computeFreshness, type SyncLogRow } from '@/lib/sync/freshness';
 import { SyncNowButton } from '@/components/sync-now-button';
 
@@ -34,19 +35,7 @@ function formatDuration(ms: number | null | undefined): string {
 }
 
 function formatTimestamp(iso: string | null | undefined): string {
-  if (!iso) return '-';
-  try {
-    return new Date(iso).toLocaleString('en-US', {
-      timeZone: 'America/Los_Angeles',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
+  return formatTimestampBase(iso, { includeSeconds: true });
 }
 
 interface SyncLogDisplay {

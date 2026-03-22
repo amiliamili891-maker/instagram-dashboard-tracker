@@ -1,16 +1,23 @@
 /**
  * GET /api/sync/status — Returns freshness state and sync status
  *
- * Public endpoint (no admin guard) — used by the dashboard to show
+ * Requires admin auth — used by the dashboard to show
  * freshness badges and "data as of" timestamps.
  */
 
+import { requireAdminUser } from '@/lib/auth/guards';
 import { createServiceClient } from '@/lib/supabase/service';
 import { computeFreshness, type SyncLogRow } from '@/lib/sync/freshness';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  try {
+    await requireAdminUser();
+  } catch {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const serviceClient = createServiceClient();
 
   // Fetch recent sync logs (last 24 hours should be more than enough)

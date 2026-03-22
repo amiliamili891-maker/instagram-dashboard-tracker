@@ -8,6 +8,7 @@ const serverEnvSchema = z.object({
   META_ACCESS_TOKEN: z.string().min(1),
   META_AD_ACCOUNT_ID: z.string().min(1),
   GHSTLY_PARTNER_API_KEY: z.string().min(1),
+  GHSTLY_PARTNER_API_URL: z.url(),
 });
 
 type ServerEnvKey = keyof z.input<typeof serverEnvSchema>;
@@ -21,6 +22,7 @@ export type ServerEnv = {
   metaAccessToken: string;
   metaAdAccountId: string;
   ghstlyPartnerApiKey: string;
+  ghstlyPartnerApiUrl: string;
 };
 
 function getRequiredValue(
@@ -48,6 +50,7 @@ export function parseServerEnv(source: ServerEnvInput): ServerEnv {
     META_ACCESS_TOKEN: getRequiredValue(source, "META_ACCESS_TOKEN"),
     META_AD_ACCOUNT_ID: getRequiredValue(source, "META_AD_ACCOUNT_ID"),
     GHSTLY_PARTNER_API_KEY: getRequiredValue(source, "GHSTLY_PARTNER_API_KEY"),
+    GHSTLY_PARTNER_API_URL: getRequiredValue(source, "GHSTLY_PARTNER_API_URL"),
   };
 
   const parsed = serverEnvSchema.safeParse(raw);
@@ -72,6 +75,7 @@ export function parseServerEnv(source: ServerEnvInput): ServerEnv {
     metaAccessToken: parsed.data.META_ACCESS_TOKEN,
     metaAdAccountId: parsed.data.META_AD_ACCOUNT_ID,
     ghstlyPartnerApiKey: parsed.data.GHSTLY_PARTNER_API_KEY,
+    ghstlyPartnerApiUrl: parsed.data.GHSTLY_PARTNER_API_URL,
   };
 }
 

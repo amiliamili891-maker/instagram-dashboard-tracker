@@ -50,6 +50,9 @@ const METRIC_OPTIONS = [
   { value: 'cost_per_unique_click', label: 'Cost per Unique Click' },
 ];
 
+/** Set of valid metric column names for safe interpolation into select queries */
+const VALID_METRIC_VALUES = new Set(METRIC_OPTIONS.map((m) => m.value));
+
 function getDefaultDates() {
   const now = new Date();
   const to = now.toISOString().split('T')[0];
@@ -74,10 +77,14 @@ async function fetchTrends(opts: {
 
   const isRate = RATE_METRICS.includes(opts.metric);
 
-  // Select key columns instead of SELECT *
-  let query = supabase
+  // Validate metric before interpolation into select
+  const safeMetric = VALID_METRIC_VALUES.has(opts.metric) ? opts.metric : 'spend';
+
+  // Select only the needed columns: report_date, the metric, and freshness_state
+  // Cast to `any` because Supabase's type parser cannot handle dynamic template literal selects
+  let query = (supabase
     .from('daily_combined_stats')
-    .select('report_date, entity_id, entity_level, freshness_state, spend, impressions, clicks, unique_clicks, chats, visits, reveals, click_throughs, chat_rate, cost_per_chat, reveal_rate, cost_per_reveal, reveal_click_through_rate, ctr, cpc, cpm, cost_per_unique_click')
+    .select(`report_date, ${safeMetric}, freshness_state`) as any)
     .gte('report_date', opts.dateFrom)
     .lte('report_date', opts.dateTo)
     .order('report_date', { ascending: true });

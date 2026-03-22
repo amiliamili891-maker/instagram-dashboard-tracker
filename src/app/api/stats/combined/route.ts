@@ -103,13 +103,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return Response.json({
+    return new Response(JSON.stringify({
       data: data ?? [],
       meta: {
         level,
         date_from: dateFrom,
         date_to: dateTo,
         count: data?.length ?? 0,
+      },
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
       },
     });
   } catch (err) {

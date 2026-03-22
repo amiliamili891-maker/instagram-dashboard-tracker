@@ -36,18 +36,13 @@ async function fetchAggregated(
   supabase: ReturnType<typeof createServiceClient>,
   range: DateRange,
 ): Promise<AggregatedKpis> {
-  // Fetch ad-level combined stats and sum additive metrics
-  const { data, error } = await supabase
-    .from("daily_combined_stats")
-    .select(
-      "spend, clicks, impressions, unique_clicks, chats, visits, reveals",
-    )
-    .eq("entity_level", "ad")
-    .gte("report_date", range.from)
-    .lte("report_date", range.to);
+  const { data, error } = await supabase.rpc("aggregate_kpis", {
+    date_from: range.from,
+    date_to: range.to,
+  });
 
   if (error) {
-    console.error("Overview stats fetch error:", error.message);
+    console.error("Overview stats RPC error:", error.message);
     return {
       spend: 0,
       clicks: 0,
@@ -59,28 +54,29 @@ async function fetchAggregated(
     };
   }
 
-  const rows = data ?? [];
-  const result: AggregatedKpis = {
-    spend: 0,
-    clicks: 0,
-    impressions: 0,
-    unique_clicks: 0,
-    chats: 0,
-    visits: 0,
-    reveals: 0,
-  };
-
-  for (const row of rows) {
-    result.spend += Number(row.spend) || 0;
-    result.clicks += Number(row.clicks) || 0;
-    result.impressions += Number(row.impressions) || 0;
-    result.unique_clicks += Number(row.unique_clicks) || 0;
-    result.chats += Number(row.chats) || 0;
-    result.visits += Number(row.visits) || 0;
-    result.reveals += Number(row.reveals) || 0;
+  // RPC returns an array with a single row
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    return {
+      spend: 0,
+      clicks: 0,
+      impressions: 0,
+      unique_clicks: 0,
+      chats: 0,
+      visits: 0,
+      reveals: 0,
+    };
   }
 
-  return result;
+  return {
+    spend: Number(row.spend) || 0,
+    clicks: Number(row.clicks) || 0,
+    impressions: Number(row.impressions) || 0,
+    unique_clicks: Number(row.unique_clicks) || 0,
+    chats: Number(row.chats) || 0,
+    visits: Number(row.visits) || 0,
+    reveals: Number(row.reveals) || 0,
+  };
 }
 
 function safeDivide(num: number, denom: number): number | null {
@@ -190,12 +186,17 @@ export async function GET(request: NextRequest) {
     },
   ];
 
-  return Response.json({
+  return new Response(JSON.stringify({
     kpis,
     dateRange: {
       current: currentRange,
       comparison: compRange,
     },
     period,
+  }), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
+    },
   });
 }

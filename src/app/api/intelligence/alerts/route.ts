@@ -69,33 +69,21 @@ export async function GET(request: NextRequest) {
     const nameMap: Record<string, string> = {};
 
     if (entityIds.length > 0) {
-      const { data: ads } = await serviceClient
-        .from('ads')
-        .select('id, name')
-        .in('id', entityIds);
-      for (const ad of ads ?? []) {
+      // Fetch ads, campaigns, and adsets in parallel
+      const [adsResult, campaignsResult, adsetsResult] = await Promise.all([
+        serviceClient.from('ads').select('id, name').in('id', entityIds),
+        serviceClient.from('campaigns').select('id, name').in('id', entityIds),
+        serviceClient.from('adsets').select('id, name').in('id', entityIds),
+      ]);
+
+      for (const ad of adsResult.data ?? []) {
         nameMap[ad.id] = ad.name;
       }
-      // Also try campaigns and adsets for non-ad entities
-      const unmapped = entityIds.filter((id) => !nameMap[id]);
-      if (unmapped.length > 0) {
-        const { data: campaigns } = await serviceClient
-          .from('campaigns')
-          .select('id, name')
-          .in('id', unmapped);
-        for (const c of campaigns ?? []) {
-          nameMap[c.id] = c.name;
-        }
+      for (const c of campaignsResult.data ?? []) {
+        if (!nameMap[c.id]) nameMap[c.id] = c.name;
       }
-      const stillUnmapped = entityIds.filter((id) => !nameMap[id]);
-      if (stillUnmapped.length > 0) {
-        const { data: adsets } = await serviceClient
-          .from('adsets')
-          .select('id, name')
-          .in('id', stillUnmapped);
-        for (const a of adsets ?? []) {
-          nameMap[a.id] = a.name;
-        }
+      for (const a of adsetsResult.data ?? []) {
+        if (!nameMap[a.id]) nameMap[a.id] = a.name;
       }
 
       // Attach names to rows
@@ -105,11 +93,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return Response.json({
+    return new Response(JSON.stringify({
       data: rows,
       meta: {
         count: rows.length,
         filters: { type: alertType, severity },
+      },
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
       },
     });
   } catch (err) {

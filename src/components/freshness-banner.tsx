@@ -1,44 +1,20 @@
-"use client";
+/**
+ * Freshness Banner — Server component that displays data freshness status.
+ * Data is fetched by the page and passed as props.
+ */
 
-import { useEffect, useState } from "react";
 import type { FreshnessState, FreshnessResult } from "@/lib/sync/freshness";
 
-interface SyncStatusResponse {
+export interface FreshnessBannerData {
   freshness: FreshnessResult;
   isRunning: boolean;
-  runningSyncId: string | null;
 }
 
-export function FreshnessBanner({
-  onFreshnessChange,
-}: {
-  onFreshnessChange?: (state: FreshnessState) => void;
-}) {
-  const [data, setData] = useState<SyncStatusResponse | null>(null);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/sync/status")
-      .then((r) => r.json())
-      .then((json: SyncStatusResponse) => {
-        setData(json);
-        onFreshnessChange?.(json.freshness.state);
-      })
-      .catch(() => setError(true));
-  }, [onFreshnessChange]);
-
-  if (error) {
+export function FreshnessBanner({ data }: { data: FreshnessBannerData | null }) {
+  if (!data) {
     return (
       <div className="freshness-banner freshness-banner-error">
         Unable to fetch sync status.
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="freshness-banner freshness-banner-loading">
-        Checking data freshness...
       </div>
     );
   }

@@ -111,19 +111,20 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServiceClient();
 
-    // Determine entity level from filters
-    const entityLevel = adId ? 'ad' : adsetId ? 'adset' : campaignId ? 'campaign' : 'ad';
+    // Determine if we have entity-specific filters
+    const hasEntityFilter = !!(adId || adsetId || campaignId);
 
     // Build and execute primary query
-    const primaryData = await fetchTrendData(supabase as any, {
-      metric,
-      dateFrom,
-      dateTo,
-      entityLevel,
-      campaignId,
-      adsetId,
-      adId,
-    });
+    const primaryData = hasEntityFilter
+      ? await fetchTrendDataFiltered(supabase as any, {
+          metric,
+          dateFrom,
+          dateTo,
+          campaignId,
+          adsetId,
+          adId,
+        })
+      : await fetchTrendDataRpc(supabase as any, { metric, dateFrom, dateTo });
 
     if (primaryData.error) {
       console.error('Failed to fetch trends:', primaryData.error);
@@ -154,52 +155,89 @@ export async function GET(request: NextRequest) {
 
     // Fetch comparison data if requested
     if (compareFrom && compareTo) {
-      const comparisonData = await fetchTrendData(supabase as any, {
-        metric,
-        dateFrom: compareFrom,
-        dateTo: compareTo,
-        entityLevel,
-        campaignId,
-        adsetId,
-        adId,
-      });
+      const comparisonData = hasEntityFilter
+        ? await fetchTrendDataFiltered(supabase as any, {
+            metric,
+            dateFrom: compareFrom,
+            dateTo: compareTo,
+            campaignId,
+            adsetId,
+            adId,
+          })
+        : await fetchTrendDataRpc(supabase as any, {
+            metric,
+            dateFrom: compareFrom,
+            dateTo: compareTo,
+          });
 
       if (!comparisonData.error) {
         result.comparison = comparisonData.rows;
       }
     }
 
-    return Response.json(result);
+    return new Response(JSON.stringify(result), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
+      },
+    });
   } catch (err) {
     console.error('Trends API error:', err);
     return Response.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
+/**
+ * Use the aggregate_trends RPC for the common unfiltered case.
+ * Aggregation happens server-side in Postgres.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function fetchTrendData(
+async function fetchTrendDataRpc(
+  supabase: any,
+  opts: { metric: string; dateFrom: string; dateTo: string },
+) {
+  const { data, error } = await supabase.rpc('aggregate_trends', {
+    date_from: opts.dateFrom,
+    date_to: opts.dateTo,
+    metric_name: opts.metric,
+  });
+
+  if (error) {
+    return { rows: [], error: error.message };
+  }
+
+  const rows: { date: string; value: number | null }[] = (data ?? []).map(
+    (row: { report_date: string; metric_value: number | null }) => ({
+      date: row.report_date,
+      value: row.metric_value !== null ? Number(row.metric_value) : null,
+    }),
+  );
+
+  return { rows, error: null };
+}
+
+/**
+ * Fallback for entity-filtered queries (single entity, small data set).
+ * Still fetches rows but the result set is small (max ~30 rows for one entity).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchTrendDataFiltered(
   supabase: any,
   opts: {
     metric: string;
     dateFrom: string;
     dateTo: string;
-    entityLevel: string;
     campaignId: string | null;
     adsetId: string | null;
     adId: string | null;
   },
 ) {
-  // We select report_date and the metric column, grouped by date.
-  // Since daily_combined_stats may have multiple entity rows per date,
-  // we aggregate: SUM for additive metrics, AVG for rates.
   const isRateMetric = [
     'chat_rate', 'reveal_rate', 'reveal_click_through_rate',
     'ctr', 'cpc', 'cpm', 'cost_per_chat', 'cost_per_reveal',
     'cost_per_unique_click', 'cost_per_action',
   ].includes(opts.metric);
 
-  // Build a raw SQL query via RPC or use select + client-side aggregation
-  // Since Supabase JS doesn't support GROUP BY, we fetch raw rows and aggregate client-side
   let query = supabase
     .from('daily_combined_stats')
     .select(`report_date, ${opts.metric}, freshness_state`)
@@ -215,7 +253,6 @@ async function fetchTrendData(
   } else if (opts.campaignId) {
     query = query.eq('entity_level', 'campaign').eq('entity_id', opts.campaignId);
   }
-  // If no entity filter, return all ad-level rows aggregated by date
 
   const { data, error } = await query;
 
@@ -223,7 +260,7 @@ async function fetchTrendData(
     return { rows: [], error: error.message };
   }
 
-  // Aggregate by date
+  // Aggregate by date (handles multiple rows per date at non-ad levels)
   const byDate = new Map<string, { sum: number; count: number; hasDegradedOrStale: boolean }>();
 
   for (const row of data ?? []) {
@@ -252,7 +289,6 @@ async function fetchTrendData(
   for (const [date, entry] of byDate) {
     let value: number | null = null;
 
-    // Suppress cross-source metrics in degraded/stale state
     const isCrossSource = [
       'cost_per_chat', 'cost_per_reveal', 'chat_rate',
       'reveal_rate', 'reveal_click_through_rate',

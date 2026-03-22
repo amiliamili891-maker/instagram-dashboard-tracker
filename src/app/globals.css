@@ -6,7 +6,7 @@
   --accent: #1a6b64;
   --accent-strong: #0f4f4a;
   --danger: #a1363a;
-  --muted: #5d6b70;
+  --muted: #4a5559;
 }
 
 html {
@@ -31,6 +31,31 @@ body {
   font-family: var(--font-geist-sans), sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Skip-to-content link — visually hidden until focused */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: 1000;
+  padding: 0.75rem 1.5rem;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 0 0 0.5rem 0;
+}
+
+.skip-link:focus {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: auto;
+  height: auto;
 }
 
 * {
@@ -711,6 +736,21 @@ a {
   padding: 1rem;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.retry-button {
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.retry-button:hover {
+  background: var(--accent-strong);
 }
 
 .kpi-card {
@@ -2500,4 +2540,331 @@ body::before {
 
 .budget-table tbody tr:hover {
   background: rgba(26, 107, 100, 0.06);
+}
+
+/* ============================================================
+   Docs Page
+   ============================================================ */
+
+.docs-page {
+  width: min(100%, 80rem);
+  padding: 1.5rem;
+}
+
+.docs-header {
+  margin-bottom: 1.5rem;
+}
+
+.docs-page h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.docs-subtitle {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+/* ---- Table of Contents ---- */
+
+.docs-toc {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 2rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  overflow-x: auto;
+}
+
+.docs-toc-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  margin-right: 0.25rem;
+}
+
+.docs-toc-link {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.4rem;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.docs-toc-link:hover {
+  background: rgba(26, 107, 100, 0.1);
+}
+
+/* ---- Content Area ---- */
+
+.docs-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.docs-section {
+  padding: 1.5rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 1rem;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 40px rgba(21, 32, 37, 0.06);
+}
+
+/* ---- Headings ---- */
+
+.docs-heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--accent-strong);
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid rgba(26, 107, 100, 0.18);
+}
+
+.docs-subheading {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--foreground);
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+/* ---- Docs Table ---- */
+
+.docs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin: 1rem 0;
+}
+
+.docs-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid var(--panel-border);
+}
+
+.docs-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--panel-border);
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+.docs-table tbody tr:nth-child(even) {
+  background: rgba(21, 32, 37, 0.02);
+}
+
+.docs-table tbody tr:hover {
+  background: rgba(26, 107, 100, 0.06);
+}
+
+.docs-table code {
+  font-size: 0.78rem;
+  background: rgba(21, 32, 37, 0.06);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  font-family: var(--font-geist-mono), monospace;
+}
+
+/* ---- Code Blocks ---- */
+
+.docs-code {
+  display: inline;
+  background: rgba(21, 32, 37, 0.08);
+  color: var(--accent-strong);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.78rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.35rem;
+}
+
+.json-block {
+  display: block;
+  background: #1a2025;
+  color: #e4e8ea;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.78rem;
+  line-height: 1.65;
+  padding: 1rem 1.25rem;
+  border-radius: 0.6rem;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+  white-space: pre;
+}
+
+/* ---- Callout Box ---- */
+
+.docs-callout {
+  border-left: 3px solid var(--accent);
+  background: rgba(26, 107, 100, 0.06);
+  padding: 0.75rem 1rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.docs-callout strong {
+  color: var(--accent-strong);
+}
+
+/* ---- Numbered Steps ---- */
+
+.docs-step {
+  display: flex;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  align-items: flex-start;
+}
+
+.docs-step-num {
+  flex-shrink: 0;
+  width: 1.6rem;
+  height: 1.6rem;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 50%;
+}
+
+.docs-step-body {
+  flex: 1;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.docs-step-body p {
+  margin-bottom: 0.5rem;
+}
+
+/* ---- Prose defaults inside docs sections ---- */
+
+.docs-section p {
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--foreground);
+  margin-bottom: 0.75rem;
+}
+
+.docs-section ul,
+.docs-section ol {
+  font-size: 0.85rem;
+  line-height: 1.65;
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.docs-section li {
+  margin-bottom: 0.35rem;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 640px) {
+  .docs-page {
+    padding: 1rem;
+  }
+
+  .docs-toc {
+    flex-wrap: wrap;
+  }
+
+  .docs-section {
+    padding: 1rem;
+  }
+
+  .docs-table {
+    font-size: 0.75rem;
+  }
+
+  .docs-table th,
+  .docs-table td {
+    padding: 0.35rem 0.5rem;
+  }
+}
+
+/* ── Sortable table headers ── */
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.sortable-th:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.sort-indicator {
+  margin-left: 0.15rem;
+  opacity: 0.4;
+  font-size: 0.7em;
+}
+
+.sort-indicator.active {
+  opacity: 1;
+}
+
+/* ── Controls row (controls + export button) ── */
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.controls-row .session-controls,
+.controls-row .geo-controls,
+.controls-row .trends-controls {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+/* ── CSV export button ── */
+.csv-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+  background: var(--panel);
+  color: var(--foreground);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.csv-export-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: rgba(26, 107, 100, 0.06);
+}
+
+.csv-export-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

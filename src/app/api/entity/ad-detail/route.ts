@@ -45,11 +45,16 @@ export async function GET(request: NextRequest) {
     supabase.from("adsets").select("name").eq("id", ad.adset_id).single(),
   ]);
 
-  return Response.json({
+  return new Response(JSON.stringify({
     ad_name: ad.name,
     campaign_id: ad.campaign_id,
     campaign_name: campaignResult.data?.name ?? ad.campaign_id,
     adset_id: ad.adset_id,
     adset_name: adsetResult.data?.name ?? ad.adset_id,
+  }), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
+    },
   });
 }

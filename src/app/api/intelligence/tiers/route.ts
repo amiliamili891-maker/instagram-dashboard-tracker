@@ -69,11 +69,16 @@ export async function GET(request: NextRequest) {
 
     const tiers = Array.from(latestByEntity.values());
 
-    return Response.json({
+    return new Response(JSON.stringify({
       data: tiers,
       meta: {
         count: tiers.length,
         filters: { level: entityLevel },
+      },
+    }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
       },
     });
   } catch (err) {

@@ -1,24 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { FreshnessState } from "@/lib/sync/freshness";
 import type { BudgetRecommendation } from "@/lib/intelligence/budget-advisor";
 import { ImageLightbox } from "@/components/image-lightbox";
 
 type RecWithName = BudgetRecommendation & { entityName?: string | null };
 
-interface BudgetApiResponse {
-  data: {
-    recommendations: RecWithName[];
-    pauseCandidates: RecWithName[];
-    scaleCandidates: RecWithName[];
-    totalCurrentSpend: number;
-    suggestedReallocation: number;
-  };
-  meta: {
-    suppressed: boolean;
-    reason?: string;
-  };
+export interface BudgetApiData {
+  recommendations: RecWithName[];
+  pauseCandidates: RecWithName[];
+  scaleCandidates: RecWithName[];
+  totalCurrentSpend: number;
+  suggestedReallocation: number;
+}
+
+export interface BudgetApiMeta {
+  suppressed: boolean;
+  reason?: string;
 }
 
 function ActionBadge({ action }: { action: string }) {
@@ -55,10 +53,10 @@ function RationaleBlock({ rationale }: { rationale: string }) {
     <div className="rationale-block">
       {lines.map((line, i) => (
         <div key={i} className={
-          line.startsWith("→") ? "rationale-advice" :
-          line.startsWith("⚠") ? "rationale-warning" :
-          line.startsWith("✓") ? "rationale-good" :
-          line.startsWith("•") ? "rationale-neutral" :
+          line.startsWith("\u2192") ? "rationale-advice" :
+          line.startsWith("\u26A0") ? "rationale-warning" :
+          line.startsWith("\u2713") ? "rationale-good" :
+          line.startsWith("\u2022") ? "rationale-neutral" :
           i === 0 ? "rationale-verdict" : "rationale-line"
         }>
           {line}
@@ -70,37 +68,16 @@ function RationaleBlock({ rationale }: { rationale: string }) {
 
 export function BudgetSection({
   freshnessState,
+  data,
+  meta,
 }: {
   freshnessState: FreshnessState | null;
+  data: BudgetApiData | null;
+  meta: BudgetApiMeta | null;
 }) {
-  const [data, setData] = useState<BudgetApiResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  // Suppress client-side when freshness is known to be bad
+  // Suppress when freshness is known to be bad
   const suppressed =
     freshnessState === "degraded" || freshnessState === "stale";
-
-  useEffect(() => {
-    if (suppressed) {
-      setLoading(false);
-      return;
-    }
-
-    fetch("/api/intelligence/budget")
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed");
-        return r.json();
-      })
-      .then((json: BudgetApiResponse) => {
-        setData(json);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError(true);
-        setLoading(false);
-      });
-  }, [suppressed]);
 
   if (suppressed) {
     return (
@@ -114,16 +91,7 @@ export function BudgetSection({
     );
   }
 
-  if (loading) {
-    return (
-      <div className="budget-section">
-        <h2 className="section-title">Budget Advisor</h2>
-        <div className="budget-loading">Loading recommendations...</div>
-      </div>
-    );
-  }
-
-  if (error || !data) {
+  if (!data || !meta) {
     return (
       <div className="budget-section">
         <h2 className="section-title">Budget Advisor</h2>
@@ -133,16 +101,16 @@ export function BudgetSection({
   }
 
   // Also handle server-side suppression
-  if (data.meta.suppressed) {
+  if (meta.suppressed) {
     return (
       <div className="budget-section">
         <h2 className="section-title">Budget Advisor</h2>
-        <div className="budget-suppressed">{data.meta.reason}</div>
+        <div className="budget-suppressed">{meta.reason}</div>
       </div>
     );
   }
 
-  const { pauseCandidates, scaleCandidates, suggestedReallocation } = data.data;
+  const { pauseCandidates, scaleCandidates, suggestedReallocation } = data;
 
   if (pauseCandidates.length === 0 && scaleCandidates.length === 0) {
     return (
@@ -204,7 +172,7 @@ export function BudgetSection({
                     <td>
                       {rec.suggestedSpend !== null
                         ? formatSpend(rec.suggestedSpend)
-                        : "—"}
+                        : "\u2014"}
                     </td>
                     <td>
                       <RationaleBlock rationale={rec.rationale} />
@@ -252,7 +220,7 @@ export function BudgetSection({
                     <td>
                       {rec.suggestedSpend !== null
                         ? formatSpend(rec.suggestedSpend)
-                        : "—"}
+                        : "\u2014"}
                     </td>
                     <td>
                       <RationaleBlock rationale={rec.rationale} />

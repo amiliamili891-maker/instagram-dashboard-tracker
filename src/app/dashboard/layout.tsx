@@ -6,6 +6,7 @@ import { computeFreshness, type SyncLogRow } from "@/lib/sync/freshness";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { NavLinks } from "@/components/nav-links";
 import { TimeSelector } from "@/components/time-selector";
+import { formatTimestamp } from "@/lib/format-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -33,19 +34,8 @@ async function getFreshness() {
   }
 }
 
-function formatTimestamp(iso: string | null | undefined): string {
-  if (!iso) return "never";
-  try {
-    return new Date(iso).toLocaleString("en-US", {
-      timeZone: "America/Los_Angeles",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
+function formatTs(iso: string | null | undefined): string {
+  return formatTimestamp(iso, { fallback: "never" });
 }
 
 export default async function DashboardLayout({
@@ -58,6 +48,7 @@ export default async function DashboardLayout({
 
   return (
     <main className="dashboard-shell">
+      <a href="#main-content" className="skip-link">Skip to content</a>
       <header className="dashboard-header">
         <div className="header-top">
           <div className="header-left">
@@ -66,9 +57,9 @@ export default async function DashboardLayout({
               <div className="freshness-info">
                 <FreshnessBadge state={freshness.state} />
                 <span className="data-as-of">
-                  Data: Meta {formatTimestamp(freshness.meta.lastSuccessAt)}
+                  Data: Meta {formatTs(freshness.meta.lastSuccessAt)}
                   {" | "}
-                  Ghstly {formatTimestamp(freshness.ghstly.lastSuccessAt)}
+                  Ghstly {formatTs(freshness.ghstly.lastSuccessAt)}
                 </span>
               </div>
             )}
@@ -83,15 +74,11 @@ export default async function DashboardLayout({
           </div>
         </div>
         <div className="header-controls">
-          <Suspense>
-            <NavLinks />
-          </Suspense>
-          <Suspense>
-            <TimeSelector />
-          </Suspense>
+          <NavLinks />
+          <TimeSelector />
         </div>
       </header>
-      <div className="dashboard-content">{children}</div>
+      <div id="main-content" className="dashboard-content">{children}</div>
     </main>
   );
 }

@@ -3,7 +3,8 @@
  *
  * Covers:
  *   - Parameter validation (missing/invalid group_by, dates)
- *   - Geo aggregation logic
+ *   - Geo aggregation logic via RPC
+ *   - Entity-filtered fallback path
  *   - Auth guard
  */
 
@@ -76,26 +77,18 @@ describe('GET /api/stats/geo', () => {
     expect(res.status).toBe(400);
   });
 
-  it('aggregates sessions by country', async () => {
-    const queryChain = {
-      select: vi.fn().mockReturnThis(),
-      gte: vi.fn().mockReturnThis(),
-      lte: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-    };
-
-    queryChain.lte.mockResolvedValue({
+  it('aggregates sessions by country via RPC', async () => {
+    // Mock RPC call for aggregate_geo
+    const mockRpc = vi.fn().mockResolvedValue({
       data: [
-        { country: 'US', reached_reveal: true, clicked_through: true, converted: false, messages_count: 5 },
-        { country: 'US', reached_reveal: false, clicked_through: false, converted: false, messages_count: 3 },
-        { country: 'UK', reached_reveal: true, clicked_through: false, converted: true, messages_count: 8 },
-        { country: 'UK', reached_reveal: false, clicked_through: false, converted: false, messages_count: 0 },
+        { group_name: 'US', sessions: 2, chatted: 2, revealed: 1, clicked: 1, converted: 0 },
+        { group_name: 'UK', sessions: 2, chatted: 1, revealed: 1, clicked: 0, converted: 1 },
       ],
       error: null,
     });
 
     mockCreateClient.mockReturnValue({
-      from: () => queryChain,
+      rpc: mockRpc,
     });
 
     const res = await GET(makeRequest({
@@ -125,23 +118,18 @@ describe('GET /api/stats/geo', () => {
 
     expect(body.meta.total_sessions).toBe(4);
     expect(body.meta.unique_locations).toBe(2);
+
+    // Verify RPC was called with correct params
+    expect(mockRpc).toHaveBeenCalledWith('aggregate_geo', {
+      date_from: '2026-03-01',
+      date_to: '2026-03-07',
+      group_by_field: 'country',
+    });
   });
 
-  it('handles empty results', async () => {
-    const queryChain = {
-      select: vi.fn().mockReturnThis(),
-      gte: vi.fn().mockReturnThis(),
-      lte: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-    };
-
-    queryChain.lte.mockResolvedValue({
-      data: [],
-      error: null,
-    });
-
+  it('handles empty results from RPC', async () => {
     mockCreateClient.mockReturnValue({
-      from: () => queryChain,
+      rpc: vi.fn().mockResolvedValue({ data: [], error: null }),
     });
 
     const res = await GET(makeRequest({
@@ -154,5 +142,39 @@ describe('GET /api/stats/geo', () => {
     const body = await res.json();
     expect(body.data).toHaveLength(0);
     expect(body.meta.total_sessions).toBe(0);
+  });
+
+  it('uses row-level fallback for entity-filtered queries', async () => {
+    const queryChain = {
+      select: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      lte: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+    };
+
+    queryChain.eq.mockResolvedValue({
+      data: [
+        { country: 'US', reached_reveal: true, clicked_through: true, converted: false, messages_count: 5 },
+        { country: 'US', reached_reveal: false, clicked_through: false, converted: false, messages_count: 3 },
+      ],
+      error: null,
+    });
+
+    mockCreateClient.mockReturnValue({
+      from: () => queryChain,
+    });
+
+    const res = await GET(makeRequest({
+      group_by: 'country',
+      date_from: '2026-03-01',
+      date_to: '2026-03-07',
+      campaign_id: 'camp_123',
+    }));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].location).toBe('US');
+    expect(body.data[0].sessions).toBe(2);
   });
 });

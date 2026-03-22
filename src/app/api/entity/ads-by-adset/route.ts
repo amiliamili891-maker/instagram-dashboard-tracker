@@ -47,10 +47,15 @@ export async function GET(request: NextRequest) {
     campaignName = campData?.name ?? "";
   }
 
-  return Response.json({
+  return new Response(JSON.stringify({
     ads: adsResult.data ?? [],
     adset_name: adsetResult.data?.name ?? adsetId,
     campaign_id: adsetResult.data?.campaign_id ?? "",
     campaign_name: campaignName,
+  }), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
+    },
   });
 }

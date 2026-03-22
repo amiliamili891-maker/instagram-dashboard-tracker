@@ -542,21 +542,51 @@ async function cacheCreativeThumbnails(
   ads: MetaAdRow[],
 ): Promise<number> {
   const adsWithThumbnails = ads.filter((a) => a.creative?.thumbnail_url);
+
+  // Skip ads that already have a cached thumbnail (saves 5-10s per incremental sync)
+  const adIds = adsWithThumbnails.map((a) => a.id);
+  const alreadyCached = new Set<string>();
+  if (adIds.length > 0) {
+    const { data } = await supabase
+      .from("ads")
+      .select("id")
+      .in("id", adIds)
+      .not("creative_storage_path", "is", null);
+    if (data) {
+      for (const row of data) alreadyCached.add(row.id);
+    }
+  }
+  const uncachedThumbnails = adsWithThumbnails.filter((a) => !alreadyCached.has(a.id));
+
   let cached = 0;
 
   // Process in batches of THUMBNAIL_CONCURRENCY for parallel downloads
-  for (let i = 0; i < adsWithThumbnails.length; i += THUMBNAIL_CONCURRENCY) {
-    const batch = adsWithThumbnails.slice(i, i + THUMBNAIL_CONCURRENCY);
+  for (let i = 0; i < uncachedThumbnails.length; i += THUMBNAIL_CONCURRENCY) {
+    const batch = uncachedThumbnails.slice(i, i + THUMBNAIL_CONCURRENCY);
     const results = await Promise.allSettled(
       batch.map((ad) => cacheSingleThumbnail(supabase, ad)),
     );
     cached += results.filter((r) => r.status === "fulfilled" && r.value).length;
   }
 
-  // Also cache full-size images where available
+  // Also cache full-size images where available, skip already-cached
   const adsWithFullImages = ads.filter((a) => a.creative?.image_url);
-  for (let i = 0; i < adsWithFullImages.length; i += THUMBNAIL_CONCURRENCY) {
-    const batch = adsWithFullImages.slice(i, i + THUMBNAIL_CONCURRENCY);
+  const fullImageIds = adsWithFullImages.map((a) => a.id);
+  const alreadyCachedFull = new Set<string>();
+  if (fullImageIds.length > 0) {
+    const { data } = await supabase
+      .from("ads")
+      .select("id")
+      .in("id", fullImageIds)
+      .not("creative_full_path", "is", null);
+    if (data) {
+      for (const row of data) alreadyCachedFull.add(row.id);
+    }
+  }
+  const uncachedFullImages = adsWithFullImages.filter((a) => !alreadyCachedFull.has(a.id));
+
+  for (let i = 0; i < uncachedFullImages.length; i += THUMBNAIL_CONCURRENCY) {
+    const batch = uncachedFullImages.slice(i, i + THUMBNAIL_CONCURRENCY);
     await Promise.allSettled(
       batch.map((ad) => cacheSingleFullImage(supabase, ad)),
     );

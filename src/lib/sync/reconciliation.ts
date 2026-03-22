@@ -14,6 +14,7 @@
  */
 
 import { RECONCILIATION_CONFIG } from '@/lib/contracts/data-contract';
+import { type DateRange } from './types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,10 +80,8 @@ export interface SessionAggregateForReconciliation {
   conversions: number;
 }
 
-export interface DateRange {
-  from: string;
-  to: string;
-}
+// DateRange imported from ./types
+export type { DateRange } from './types';
 
 /** Persistence interface for dependency injection */
 export interface ReconciliationPersistence {

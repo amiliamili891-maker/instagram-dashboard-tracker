@@ -1,51 +1,37 @@
 /**
  * POST /api/sync — Manual combined sync trigger (admin-only)
+ * GET  /api/sync — Vercel Cron handler (4x daily)
  *
- * Triggers a combined Meta + Ghstly sync. Only accessible to admin users.
- * Uses the sync orchestrator with deduplication lock.
+ * Triggers a combined Meta + Ghstly sync, materializes combined stats,
+ * then runs the intelligence pass (anomalies, tiers, mismatches, budget).
  */
 
 import { timingSafeEqual } from 'crypto';
-import { materializeCombinedStats, type CombinePersistence } from '@/lib/sync/combine';
+import { materializeCombinedStats } from '@/lib/sync/combine';
 import { getServerEnv } from '@/lib/env';
 import { isAdminEmail } from '@/lib/auth/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import {
   runCombinedSync,
-  type OrchestratorPersistence,
-  type OrchestratorSyncLog,
   type SyncType,
 } from '@/lib/sync/orchestrator';
+import {
+  createOrchestratorPersistence,
+  createGhstlyPersistence,
+  createCombinePersistence,
+} from '@/lib/sync/persistence-adapters';
+import { runIntelligencePass } from '@/lib/intelligence/run-all';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120; // Sync needs time for Meta + Ghstly API calls
 
 /**
  * Build shared sync dependencies from server env.
- * Used by both POST (manual) and GET (cron) handlers.
  */
 function buildSyncDeps(env: ReturnType<typeof getServerEnv>, syncType: SyncType, backfillDays: number) {
   const serviceClient = createServiceClient();
-
-  const persistence: OrchestratorPersistence = {
-    async insertSyncLog(entry: OrchestratorSyncLog): Promise<void> {
-      const { error } = await serviceClient.from('sync_logs').insert(entry);
-      if (error) console.error('Failed to insert sync_log:', error.message);
-    },
-    async findRunningSync() {
-      const { data, error } = await serviceClient
-        .from('sync_logs')
-        .select('sync_batch_id, started_at')
-        .eq('source', 'combined')
-        .eq('stage', 'orchestrate')
-        .eq('status', 'running')
-        .order('started_at', { ascending: false })
-        .limit(1);
-      if (error || !data || data.length === 0) return null;
-      return data[0];
-    },
-  };
+  const persistence = createOrchestratorPersistence(serviceClient);
 
   const metaSyncFn = async () => {
     const { syncMetaIncremental, syncMetaBackfill } = await import('@/lib/sync/meta-sync');
@@ -69,36 +55,8 @@ function buildSyncDeps(env: ReturnType<typeof getServerEnv>, syncType: SyncType,
     const { syncGhstlyIncremental, syncGhstlyBackfill } = await import('@/lib/sync/ghstly-sync');
     const { GhstlyClient } = await import('@/lib/api/ghstly-client');
     const client = GhstlyClient.fromEnv();
-    console.log(`[ghstly-sync] Client created with base URL: ${process.env.GHSTLY_PARTNER_API_URL || 'default (148.251.46.108:8400)'}`);
-    const ghstlyPersistence = {
-      async upsertDailyGhstlyStats(rows: unknown[]) {
-        if ((rows as unknown[]).length === 0) return;
-        const { error } = await serviceClient
-          .from('daily_ghstly_stats')
-          .upsert(rows as Record<string, unknown>[], { onConflict: 'report_date,entity_level,entity_id', ignoreDuplicates: false });
-        if (error) throw new Error(`Failed to upsert daily_ghstly_stats: ${error.message}`);
-      },
-      async upsertSessions(rows: unknown[]) {
-        if ((rows as unknown[]).length === 0) return;
-        const { error } = await serviceClient
-          .from('sessions')
-          .upsert(rows as Record<string, unknown>[], { onConflict: 'id', ignoreDuplicates: false });
-        if (error) throw new Error(`Failed to upsert sessions: ${error.message}`);
-      },
-      async insertSyncLog(entry: unknown) {
-        const { error } = await serviceClient.from('sync_logs').insert(entry as Record<string, unknown>);
-        if (error) console.error('Failed to insert ghstly sync_log:', error.message);
-      },
-      async getLatestSessionTimestamp(): Promise<string | null> {
-        const { data } = await serviceClient
-          .from('sessions')
-          .select('created_at_utc')
-          .order('created_at_utc', { ascending: false })
-          .limit(1)
-          .single();
-        return data?.created_at_utc ?? null;
-      },
-    };
+    console.log(`[ghstly-sync] Client created with base URL: ${process.env.GHSTLY_PARTNER_API_URL}`);
+    const ghstlyPersistence = createGhstlyPersistence(serviceClient);
     try {
       const result = syncType === 'backfill'
         ? await syncGhstlyBackfill(client, ghstlyPersistence, backfillDays)
@@ -115,67 +73,40 @@ function buildSyncDeps(env: ReturnType<typeof getServerEnv>, syncType: SyncType,
 }
 
 /**
- * Run the combine step after sync completes.
- * Materializes daily_combined_stats from Meta + Ghstly source tables.
+ * Run the combine step then the intelligence pass.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function runCombineStep(serviceClient: any, backfillDays: number) {
-  // materializeCombinedStats and CombinePersistence imported at top level
-
-  // Date range: from backfillDays ago (or 2 days for incremental) to today
+async function runPostSyncPipeline(serviceClient: any, backfillDays: number) {
+  // --- Combine step ---
   const now = new Date();
   const to = now.toISOString().split('T')[0];
   const daysBack = backfillDays > 0 ? backfillDays : 2;
   const from = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  const combinePersistence: CombinePersistence = {
-    async fetchMetaStats(dateRange) {
-      const { data } = await serviceClient
-        .from('daily_meta_stats')
-        .select('*')
-        .gte('report_date', dateRange.from)
-        .lte('report_date', dateRange.to);
-      return data ?? [];
-    },
-    async fetchGhstlyStats(dateRange) {
-      const { data } = await serviceClient
-        .from('daily_ghstly_stats')
-        .select('*')
-        .gte('report_date', dateRange.from)
-        .lte('report_date', dateRange.to);
-      return data ?? [];
-    },
-    async fetchSyncLogs(batchIds) {
-      if (batchIds.length === 0) return [];
-      const { data } = await serviceClient
-        .from('sync_logs')
-        .select('sync_batch_id, source, status, completed_at')
-        .in('sync_batch_id', batchIds);
-      return data ?? [];
-    },
-    async upsertCombinedStats(rows) {
-      if (rows.length === 0) return 0;
-      const { error } = await serviceClient
-        .from('daily_combined_stats')
-        .upsert(rows as unknown as Record<string, unknown>[], {
-          onConflict: 'report_date,entity_level,entity_id',
-          ignoreDuplicates: false,
-        });
-      if (error) {
-        console.error('Failed to upsert combined stats:', error.message);
-        return 0;
-      }
-      return rows.length;
-    },
-  };
+  const combinePersistence = createCombinePersistence(serviceClient);
 
   try {
-    const result = await materializeCombinedStats(combinePersistence, { from, to });
-    console.log(`Combined stats materialized: ${result.rowsUpserted} rows (${result.joinableRows} joinable, ${result.metaOnlyRows} meta-only)`);
-    return result;
+    const combineResult = await materializeCombinedStats(combinePersistence, { from, to });
+    console.log(
+      `Combined stats materialized: ${combineResult.rowsUpserted} rows (${combineResult.joinableRows} joinable, ${combineResult.metaOnlyRows} meta-only)`,
+    );
   } catch (err) {
     console.error('Combine step failed:', err);
-    return null;
+    // Don't block intelligence pass — it can still run on stale combined data
+  }
+
+  // --- Intelligence pass (non-blocking) ---
+  try {
+    const intelligenceResult = await runIntelligencePass(serviceClient);
+    if (intelligenceResult.errors.length > 0) {
+      console.warn(
+        `[intelligence] ${intelligenceResult.errors.length} module(s) failed:`,
+        intelligenceResult.errors,
+      );
+    }
+  } catch (err) {
+    // Intelligence failures must never fail the sync response
+    console.error('[intelligence] Pass failed entirely:', err);
   }
 }
 
@@ -206,8 +137,7 @@ export async function GET(request: Request) {
       triggeredBy: 'vercel-cron',
     });
 
-    // Materialize combined stats after sync
-    await runCombineStep(serviceClient, 2);
+    await runPostSyncPipeline(serviceClient, 2);
 
     const status = result.metaSuccess && result.ghstlySuccess ? 200 : 207;
     return Response.json(result, { status });
@@ -284,8 +214,7 @@ export async function POST(request: Request) {
       },
     );
 
-    // Materialize combined stats after sync
-    await runCombineStep(serviceClient, syncType === 'backfill' ? backfillDays : 2);
+    await runPostSyncPipeline(serviceClient, syncType === 'backfill' ? backfillDays : 2);
 
     const status = result.metaSuccess && result.ghstlySuccess ? 200 : 207;
     return Response.json(result, { status });

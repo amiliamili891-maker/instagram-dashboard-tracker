@@ -8,7 +8,9 @@
  */
 
 import { createServiceClient } from '@/lib/supabase/service';
+import { formatTimestamp } from '@/lib/format-utils';
 import { SessionControls } from './session-controls';
+import { CsvExportButton } from '@/components/csv-export-button';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -18,21 +20,6 @@ function getDefaultDates() {
   const to = now.toISOString().split('T')[0];
   const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   return { from, to };
-}
-
-function formatTimestamp(iso: string | null | undefined): string {
-  if (!iso) return '-';
-  try {
-    return new Date(iso).toLocaleString('en-US', {
-      timeZone: 'America/Los_Angeles',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
 }
 
 function funnelBadges(row: {
@@ -83,6 +70,13 @@ export default async function SessionsPage({
   const adId = typeof resolvedParams.ad_id === 'string' ? resolvedParams.ad_id : undefined;
   const funnelStage = typeof resolvedParams.funnel_stage === 'string' ? resolvedParams.funnel_stage : undefined;
 
+  // Sorting
+  const VALID_SORT_KEYS = ['created_at_utc', 'messages_count', 'city', 'campaign_id', 'adset_id', 'ad_id'] as const;
+  type SessionSortKey = typeof VALID_SORT_KEYS[number];
+  const rawSortBy = typeof resolvedParams.sort_by === 'string' ? resolvedParams.sort_by : 'created_at_utc';
+  const sortBy: SessionSortKey = VALID_SORT_KEYS.includes(rawSortBy as SessionSortKey) ? (rawSortBy as SessionSortKey) : 'created_at_utc';
+  const sortDir = resolvedParams.sort_dir === 'asc' ? 'asc' : 'desc';
+
   const supabase = createServiceClient();
 
   const offset = (page - 1) * limit;
@@ -93,7 +87,7 @@ export default async function SessionsPage({
       'id, created_at_utc, status, messages_count, brand, reached_reveal, clicked_through, converted, campaign_id, adset_id, ad_id, city, region, country, join_status',
       { count: 'exact' },
     )
-    .order('created_at_utc', { ascending: false })
+    .order(sortBy, { ascending: sortDir === 'asc' })
     .range(offset, offset + limit - 1);
 
   if (campaignId) query = query.eq('campaign_id', campaignId);
@@ -129,17 +123,39 @@ export default async function SessionsPage({
     adName = adEntity?.name ?? null;
   }
 
-  // Build pagination URL params
-  function pageUrl(p: number): string {
+  // Build URL with preserved params
+  function buildUrl(overrides: Record<string, string | undefined> = {}): string {
     const params = new URLSearchParams();
-    params.set('page', String(p));
-    if (dateFrom) params.set('date_from', dateFrom);
-    if (dateTo) params.set('date_to', dateTo);
-    if (campaignId) params.set('campaign_id', campaignId);
-    if (adsetId) params.set('adset_id', adsetId);
-    if (adId) params.set('ad_id', adId);
-    if (funnelStage) params.set('funnel_stage', funnelStage);
+    const merged = {
+      page: String(page),
+      date_from: dateFrom,
+      date_to: dateTo,
+      campaign_id: campaignId,
+      adset_id: adsetId,
+      ad_id: adId,
+      funnel_stage: funnelStage,
+      sort_by: sortBy !== 'created_at_utc' ? sortBy : undefined,
+      sort_dir: sortDir !== 'desc' ? sortDir : undefined,
+      ...overrides,
+    };
+    for (const [k, v] of Object.entries(merged)) {
+      if (v) params.set(k, v);
+    }
     return `/dashboard/sessions?${params.toString()}`;
+  }
+
+  function pageUrl(p: number): string {
+    return buildUrl({ page: String(p) });
+  }
+
+  function sortUrl(key: string): string {
+    const newDir = key === sortBy ? (sortDir === 'asc' ? 'desc' : 'asc') : 'desc';
+    return buildUrl({ sort_by: key, sort_dir: newDir, page: '1' });
+  }
+
+  function sortIndicator(key: string): string {
+    if (key !== sortBy) return '';
+    return sortDir === 'asc' ? ' ▲' : ' ▼';
   }
 
   return (
@@ -151,14 +167,51 @@ export default async function SessionsPage({
         </span>
       </header>
 
-      <SessionControls
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        funnelStage={funnelStage ?? ''}
-        campaignId={campaignId ?? ''}
-        adsetId={adsetId ?? ''}
-        adId={adId ?? ''}
-      />
+      <div className="controls-row">
+        <SessionControls
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          funnelStage={funnelStage ?? ''}
+          campaignId={campaignId ?? ''}
+          adsetId={adsetId ?? ''}
+          adId={adId ?? ''}
+        />
+        <CsvExportButton
+          rows={sessions.map((s) => ({
+            id: s.id,
+            created_at_utc: s.created_at_utc,
+            status: s.status,
+            messages_count: s.messages_count,
+            brand: s.brand,
+            reached_reveal: s.reached_reveal,
+            clicked_through: s.clicked_through,
+            converted: s.converted,
+            campaign_id: s.campaign_id,
+            adset_id: s.adset_id,
+            ad_id: s.ad_id,
+            city: s.city,
+            region: s.region,
+            country: s.country,
+            funnel: funnelBadges(s).join(', '),
+          }))}
+          filename={`sessions-${dateFrom}-to-${dateTo}`}
+          columns={[
+            { key: 'id', label: 'Session ID' },
+            { key: 'created_at_utc', label: 'Created' },
+            { key: 'campaign_id', label: 'Campaign ID' },
+            { key: 'adset_id', label: 'Adset ID' },
+            { key: 'ad_id', label: 'Ad ID' },
+            { key: 'city', label: 'City' },
+            { key: 'region', label: 'Region' },
+            { key: 'country', label: 'Country' },
+            { key: 'messages_count', label: 'Messages' },
+            { key: 'reached_reveal', label: 'Revealed' },
+            { key: 'clicked_through', label: 'Clicked' },
+            { key: 'converted', label: 'Converted' },
+            { key: 'funnel', label: 'Funnel Stage' },
+          ]}
+        />
+      </div>
 
       {adId && (
         <div className="filter-indicator">
@@ -185,11 +238,21 @@ export default async function SessionsPage({
             <thead>
               <tr>
                 <th>Session ID</th>
-                <th>Created</th>
-                <th>Campaign</th>
-                <th>Adset</th>
-                <th>Ad</th>
-                <th>City</th>
+                <th className="sortable-th">
+                  <Link href={sortUrl('created_at_utc')}>Created<span className={`sort-indicator ${sortBy === 'created_at_utc' ? 'active' : ''}`}>{sortIndicator('created_at_utc')}</span></Link>
+                </th>
+                <th className="sortable-th">
+                  <Link href={sortUrl('campaign_id')}>Campaign<span className={`sort-indicator ${sortBy === 'campaign_id' ? 'active' : ''}`}>{sortIndicator('campaign_id')}</span></Link>
+                </th>
+                <th className="sortable-th">
+                  <Link href={sortUrl('adset_id')}>Adset<span className={`sort-indicator ${sortBy === 'adset_id' ? 'active' : ''}`}>{sortIndicator('adset_id')}</span></Link>
+                </th>
+                <th className="sortable-th">
+                  <Link href={sortUrl('ad_id')}>Ad<span className={`sort-indicator ${sortBy === 'ad_id' ? 'active' : ''}`}>{sortIndicator('ad_id')}</span></Link>
+                </th>
+                <th className="sortable-th">
+                  <Link href={sortUrl('city')}>City<span className={`sort-indicator ${sortBy === 'city' ? 'active' : ''}`}>{sortIndicator('city')}</span></Link>
+                </th>
                 <th>Funnel</th>
               </tr>
             </thead>

@@ -1,9 +1,9 @@
-"use client";
+/**
+ * KPI Bar — Server component that renders KPI cards.
+ * Data is fetched by the page and passed as props.
+ */
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-
-interface KpiItem {
+export interface KpiItem {
   metric: string;
   label: string;
   current: number | null;
@@ -40,39 +40,7 @@ function DeltaArrow({
   );
 }
 
-export function KpiBar() {
-  const searchParams = useSearchParams();
-  const period = searchParams.get("period") || "7d";
-  const [kpis, setKpis] = useState<KpiItem[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    fetch(`/api/stats/overview?period=${period}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setKpis(data.kpis ?? []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setKpis([]);
-        setLoading(false);
-      });
-  }, [period]);
-
-  if (loading) {
-    return (
-      <div className="kpi-bar kpi-bar-loading">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="kpi-card kpi-card-skeleton">
-            <div className="skeleton-line skeleton-label" />
-            <div className="skeleton-line skeleton-value" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
+export function KpiBar({ kpis }: { kpis: KpiItem[] }) {
   if (kpis.length === 0) {
     return (
       <div className="kpi-bar kpi-bar-empty">

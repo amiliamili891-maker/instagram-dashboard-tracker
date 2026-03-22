@@ -48,8 +48,13 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Failed to generate URL" }, { status: 500 });
   }
 
-  return Response.json({
+  return new Response(JSON.stringify({
     url: signedUrlData.signedUrl,
     is_full_size: !!ad?.creative_full_path,
+  }), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
+    },
   });
 }

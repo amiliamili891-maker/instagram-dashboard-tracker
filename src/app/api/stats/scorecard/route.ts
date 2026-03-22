@@ -32,57 +32,39 @@ export async function GET(request: NextRequest) {
   const { current: range } = getDateRanges(period);
   const supabase = createServiceClient();
 
-  // Fetch ad-level combined stats for the period
-  const { data: statsData, error: statsError } = await supabase
-    .from("daily_combined_stats")
-    .select("*")
-    .eq("entity_level", "ad")
-    .gte("report_date", range.from)
-    .lte("report_date", range.to);
+  // Use RPC to aggregate server-side instead of fetching all rows
+  const { data: statsData, error: statsError } = await supabase.rpc(
+    "aggregate_scorecard",
+    {
+      date_from: range.from,
+      date_to: range.to,
+    },
+  );
 
   if (statsError) {
-    console.error("Scorecard stats error:", statsError.message);
+    console.error("Scorecard RPC error:", statsError.message);
     return Response.json({ error: "Failed to fetch stats" }, { status: 500 });
   }
 
-  // Aggregate by entity_id across dates
-  const aggMap = new Map<
-    string,
-    {
-      entity_id: string;
-      spend: number;
-      chats: number;
-      visits: number;
-      reveals: number;
-      impressions: number;
-      clicks: number;
-      unique_clicks: number;
-    }
-  >();
-
-  for (const row of statsData ?? []) {
-    const existing = aggMap.get(row.entity_id) ?? {
-      entity_id: row.entity_id,
-      spend: 0,
-      chats: 0,
-      visits: 0,
-      reveals: 0,
-      impressions: 0,
-      clicks: 0,
-      unique_clicks: 0,
-    };
-    existing.spend += Number(row.spend) || 0;
-    existing.chats += Number(row.chats) || 0;
-    existing.visits += Number(row.visits) || 0;
-    existing.reveals += Number(row.reveals) || 0;
-    existing.impressions += Number(row.impressions) || 0;
-    existing.clicks += Number(row.clicks) || 0;
-    existing.unique_clicks += Number(row.unique_clicks) || 0;
-    aggMap.set(row.entity_id, existing);
-  }
+  const aggregatedRows = (statsData ?? []) as Array<{
+    entity_id: string;
+    spend: number;
+    chats: number;
+    visits: number;
+    reveals: number;
+    impressions: number;
+    clicks: number;
+    unique_clicks: number;
+    click_throughs: number;
+    cost_per_chat: number | null;
+    chat_rate: number | null;
+    reveal_rate: number | null;
+    ctr: number | null;
+    cpc: number | null;
+  }>;
 
   // Fetch ad metadata (name, campaign, adset)
-  const adIds = Array.from(aggMap.keys());
+  const adIds = aggregatedRows.map((r) => r.entity_id);
   let adsMap = new Map<
     string,
     { name: string; campaign_id: string; adset_id: string }
@@ -104,45 +86,41 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Get campaign names
+    // Get campaign and adset names in parallel
     const campaignIds = [
       ...new Set((adsData ?? []).map((a) => a.campaign_id)),
     ];
-    if (campaignIds.length > 0) {
-      const { data: campData } = await supabase
-        .from("campaigns")
-        .select("id, name")
-        .in("id", campaignIds);
-      for (const c of campData ?? []) {
-        campaignsMap.set(c.id, c.name);
-      }
-    }
-
-    // Get adset names
     const adsetIds = [
       ...new Set(
         (adsData ?? []).map((a) => a.adset_id).filter(Boolean),
       ),
     ];
-    if (adsetIds.length > 0) {
-      const { data: asData } = await supabase
-        .from("adsets")
-        .select("id, name")
-        .in("id", adsetIds);
-      for (const a of asData ?? []) {
-        adsetsMap.set(a.id, a.name);
-      }
+
+    const [campResult, adsetResult] = await Promise.all([
+      campaignIds.length > 0
+        ? supabase.from("campaigns").select("id, name").in("id", campaignIds)
+        : Promise.resolve({ data: [] }),
+      adsetIds.length > 0
+        ? supabase.from("adsets").select("id, name").in("id", adsetIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    for (const c of campResult.data ?? []) {
+      campaignsMap.set(c.id, c.name);
+    }
+    for (const a of adsetResult.data ?? []) {
+      adsetsMap.set(a.id, a.name);
     }
   }
 
   // Build rows
-  const rows = Array.from(aggMap.values()).map((agg) => {
+  const rows = aggregatedRows.map((agg) => {
     const adMeta = adsMap.get(agg.entity_id);
-    const insufficient = agg.chats < MIN_CHATS_THRESHOLD;
+    const insufficient = Number(agg.chats) < MIN_CHATS_THRESHOLD;
     const costPerChat =
-      agg.chats > 0 ? agg.spend / agg.chats : null;
-    const chatRate = agg.visits > 0 ? agg.chats / agg.visits : null;
-    const revealRate = agg.chats > 0 ? agg.reveals / agg.chats : null;
+      Number(agg.chats) > 0 ? Number(agg.spend) / Number(agg.chats) : null;
+    const chatRate = Number(agg.visits) > 0 ? Number(agg.chats) / Number(agg.visits) : null;
+    const revealRate = Number(agg.chats) > 0 ? Number(agg.reveals) / Number(agg.chats) : null;
 
     return {
       entity_id: agg.entity_id,
@@ -155,16 +133,16 @@ export async function GET(request: NextRequest) {
       adset_name: adMeta
         ? adsetsMap.get(adMeta.adset_id) ?? adMeta.adset_id
         : "",
-      spend: agg.spend,
+      spend: Number(agg.spend),
       cost_per_chat: insufficient ? null : costPerChat,
       chat_rate: chatRate,
       reveal_rate: revealRate,
-      chats: agg.chats,
-      visits: agg.visits,
-      reveals: agg.reveals,
-      impressions: agg.impressions,
-      clicks: agg.clicks,
-      unique_clicks: agg.unique_clicks,
+      chats: Number(agg.chats),
+      visits: Number(agg.visits),
+      reveals: Number(agg.reveals),
+      impressions: Number(agg.impressions),
+      clicks: Number(agg.clicks),
+      unique_clicks: Number(agg.unique_clicks),
       insufficient_data: insufficient,
     };
   });
@@ -179,5 +157,10 @@ export async function GET(request: NextRequest) {
     return a.cost_per_chat - b.cost_per_chat;
   });
 
-  return Response.json({ rows, period });
+  return new Response(JSON.stringify({ rows, period }), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'private, s-maxage=900, stale-while-revalidate=1800',
+    },
+  });
 }
