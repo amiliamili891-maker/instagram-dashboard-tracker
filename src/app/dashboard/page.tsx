@@ -21,6 +21,7 @@ import { ScorecardTable, type AdRow } from "@/components/scorecard-table";
 import { OverviewAlerts, type AlertRow } from "@/components/overview-alerts";
 import { FreshnessBanner, type FreshnessBannerData } from "@/components/freshness-banner";
 import { BudgetSection, type BudgetApiData, type BudgetApiMeta } from "@/components/budget-section";
+import { FunnelChart, type FunnelStep } from "@/components/funnel-chart";
 
 export const dynamic = "force-dynamic";
 
@@ -483,12 +484,23 @@ export default async function DashboardPage({
   const supabase = createServiceClient();
 
   // Fetch all data in parallel (freshness first since budget depends on it)
-  const [kpis, scorecardRows, alerts, freshnessData] = await Promise.all([
+  const validPeriodForFunnel = isValidPeriod(period) ? period : "7d";
+  const { current: funnelRange } = getDateRanges(validPeriodForFunnel);
+
+  const [kpis, scorecardRows, alerts, freshnessData, funnelAgg] = await Promise.all([
     fetchKpiData(supabase, period),
     fetchScorecardData(supabase, period),
     fetchAlerts(supabase),
     fetchFreshnessData(supabase),
+    fetchAggregated(supabase, funnelRange),
   ]);
+
+  const funnelSteps: FunnelStep[] = [
+    { label: "Visits", value: funnelAgg.visits || null },
+    { label: "Chats", value: funnelAgg.chats || null },
+    { label: "Reveals", value: funnelAgg.reveals || null },
+    { label: "Clicks", value: funnelAgg.clicks || null },
+  ];
 
   // Budget depends on freshness state
   const freshnessState = freshnessData?.freshness.state ?? "stale";
@@ -501,6 +513,9 @@ export default async function DashboardPage({
       <FreshnessBanner data={freshnessData} />
 
       <KpiBar kpis={kpis} />
+
+      <h2 className="section-title">Conversion Funnel</h2>
+      <FunnelChart steps={funnelSteps} />
 
       <h2 className="section-title">Active Ads — Ranked by Cost per Chat</h2>
 

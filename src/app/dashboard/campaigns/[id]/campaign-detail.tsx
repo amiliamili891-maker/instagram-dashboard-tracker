@@ -1,47 +1,18 @@
-// NOTE: The entity table rendering in this file is duplicated in:
-//   - src/app/dashboard/campaigns/campaign-list.tsx
-//   - src/app/dashboard/adsets/[id]/adset-detail.tsx
-// When modifying the table structure, keep all three files in sync.
-
 "use client";
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getDateRanges, isValidPeriod } from "@/lib/date-utils";
-import { fmt } from "@/lib/format-utils";
-import { SparklineCell } from "@/components/sparkline-cell";
-import { TierBadge } from "@/components/tier-badge";
-import { useTableSort } from "@/hooks/use-table-sort";
-import { SortableTh } from "@/components/sortable-th";
+import { EntityTable, type EntityRow, type TierInfo } from "@/components/entity-table";
 import type { TierLabel, TierColor } from "@/lib/intelligence/tier-classifier";
-
-interface AdsetRow {
-  adset_id: string;
-  adset_name: string;
-  spend: number;
-  impressions: number;
-  clicks: number;
-  chats: number;
-  visits: number;
-  reveals: number;
-  cost_per_chat: number | null;
-  chat_rate: number | null;
-  reveal_rate: number | null;
-  dailyCostPerChat: (number | null)[];
-}
-
-interface TierInfo {
-  tier: TierLabel;
-  color: TierColor;
-}
 
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const searchParams = useSearchParams();
   const periodParam = searchParams.get("period");
   const period = isValidPeriod(periodParam) ? periodParam : "7d";
   const [campaignName, setCampaignName] = useState(campaignId);
-  const [rows, setRows] = useState<AdsetRow[]>([]);
+  const [rows, setRows] = useState<EntityRow[]>([]);
   const [tiers, setTiers] = useState<Map<string, TierInfo>>(new Map());
   const [loading, setLoading] = useState(true);
 
@@ -106,7 +77,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
           dayMap.set(date, dayData);
         }
 
-        const result: AdsetRow[] = Array.from(adsetAgg.entries()).map(
+        const result: EntityRow[] = Array.from(adsetAgg.entries()).map(
           ([adsetId, a]) => {
             const dayMap = daily.get(adsetId);
             let dailyCostPerChat: (number | null)[] = [];
@@ -119,8 +90,8 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
             }
 
             return {
-              adset_id: adsetId,
-              adset_name: adsetNames.get(adsetId) ?? adsetId,
+              id: adsetId,
+              name: adsetNames.get(adsetId) ?? adsetId,
               spend: a.spend,
               impressions: a.impressions,
               clicks: a.clicks,
@@ -144,15 +115,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
       });
   }, [period, campaignId]);
 
-  const { sortedRows, sortKey, sortDir, onSort } = useTableSort<AdsetRow, keyof AdsetRow>(
-    rows,
-    "spend",
-    "desc",
-  );
-
   if (loading) return <div className="table-loading">Loading adsets...</div>;
-
-  const sortProps = { activeSortKey: sortKey as string, sortDir, onSort: onSort as (key: string) => void };
 
   return (
     <>
@@ -164,70 +127,14 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
       <h1 className="page-title">{campaignName}</h1>
       <h2 className="section-title">Adsets</h2>
 
-      {rows.length === 0 ? (
-        <div className="table-empty">No adsets found for this campaign and period.</div>
-      ) : (
-        <div className="table-wrapper">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <SortableTh label="Adset" sortKey="adset_name" {...sortProps} />
-                <th>Tier</th>
-                <th>Cost/Chat Trend</th>
-                <SortableTh label="Spend" sortKey="spend" {...sortProps} />
-                <SortableTh label="Cost/Chat" sortKey="cost_per_chat" {...sortProps} />
-                <SortableTh label="Chat Rate" sortKey="chat_rate" {...sortProps} />
-                <SortableTh label="Reveal Rate" sortKey="reveal_rate" {...sortProps} />
-                <SortableTh label="Chats" sortKey="chats" {...sortProps} />
-                <SortableTh label="Visits" sortKey="visits" {...sortProps} />
-                <SortableTh label="Reveals" sortKey="reveals" {...sortProps} />
-                <SortableTh label="Impressions" sortKey="impressions" {...sortProps} />
-                <SortableTh label="Clicks" sortKey="clicks" {...sortProps} />
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRows.map((row) => {
-                const tierInfo = tiers.get(row.adset_id);
-                return (
-                  <tr key={row.adset_id}>
-                    <td>
-                      <Link
-                        href={`/dashboard/adsets/${row.adset_id}?period=${period}`}
-                        className="entity-link"
-                      >
-                        {row.adset_name}
-                      </Link>
-                    </td>
-                    <td>
-                      {tierInfo ? (
-                        <TierBadge tier={tierInfo.tier} color={tierInfo.color} />
-                      ) : (
-                        <span className="tier-badge tier-gray">--</span>
-                      )}
-                    </td>
-                    <td className="sparkline-cell">
-                      {row.dailyCostPerChat.length >= 2 ? (
-                        <SparklineCell data={row.dailyCostPerChat} />
-                      ) : (
-                        <span style={{ color: "var(--muted)", fontSize: "0.75rem" }}>--</span>
-                      )}
-                    </td>
-                    <td>{fmt(row.spend, "currency")}</td>
-                    <td>{fmt(row.cost_per_chat, "currency")}</td>
-                    <td>{fmt(row.chat_rate, "percent")}</td>
-                    <td>{fmt(row.reveal_rate, "percent")}</td>
-                    <td>{fmt(row.chats, "number")}</td>
-                    <td>{fmt(row.visits, "number")}</td>
-                    <td>{fmt(row.reveals, "number")}</td>
-                    <td>{fmt(row.impressions, "number")}</td>
-                    <td>{fmt(row.clicks, "number")}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <EntityTable
+        rows={rows}
+        tiers={tiers}
+        period={period}
+        nameLabel="Adset"
+        buildHref={(row, p) => `/dashboard/adsets/${row.id}?period=${p}`}
+        emptyMessage="No adsets found for this campaign and period."
+      />
     </>
   );
 }

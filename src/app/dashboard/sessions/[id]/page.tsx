@@ -12,6 +12,7 @@ import { formatTimestamp as formatTimestampBase } from '@/lib/format-utils';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { TranscriptPanel } from './TranscriptPanel';
+import { Badge } from '@/components/badge';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,9 +76,7 @@ export default async function SessionDetailPage({
           Back to sessions
         </Link>
         <h1>Session {id.slice(0, 12)}...</h1>
-        <span className={`status-badge status-${session.status ?? 'unknown'}`}>
-          {session.status ?? 'unknown'}
-        </span>
+        <Badge variant="status" status={session.status ?? 'unknown'} />
       </header>
 
       {/* Funnel Progression */}
@@ -160,9 +159,7 @@ export default async function SessionDetailPage({
             <tr>
               <th>Join Status</th>
               <td>
-                <span className={`join-badge join-${session.join_status}`}>
-                  {session.join_status}
-                </span>
+                <Badge variant="join" joinStatus={session.join_status} />
               </td>
             </tr>
             {session.join_issue && (

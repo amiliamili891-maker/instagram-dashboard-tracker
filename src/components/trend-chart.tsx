@@ -1,89 +1,46 @@
 'use client';
 
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend,
-} from 'recharts';
-import { formatMetricValue } from '@/lib/format-utils';
+/**
+ * Recharts 3.x uses ESM (es6/index.js) with named re-exports, so
+ * tree-shaking works correctly with bundlers like Next.js/webpack/turbopack.
+ * Named imports (e.g., `import { LineChart } from 'recharts'`) will
+ * only include the components actually used.
+ *
+ * We still wrap in next/dynamic with ssr: false because Recharts relies
+ * on browser APIs (SVG measurement, ResizeObserver) that are unavailable
+ * during server-side rendering.
+ */
+
+import dynamic from 'next/dynamic';
 
 interface TrendDataPoint {
   date: string;
   value: number | null;
 }
 
-interface TrendChartProps {
+export interface TrendChartProps {
   primaryData: TrendDataPoint[];
   comparisonData: TrendDataPoint[] | null;
   metric: string;
   metricLabel: string;
 }
 
-export function TrendChart({ primaryData, comparisonData, metric, metricLabel }: TrendChartProps) {
-  const chartData = primaryData.map((point, i) => ({
-    date: point.date,
-    primary: point.value,
-    comparison: comparisonData?.[i]?.value ?? null,
-  }));
+const TrendChartInner = dynamic(
+  () =>
+    import('./trend-chart-inner').then((m) => ({
+      default: m.TrendChartInner,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="skeleton-cell skeleton-chart"
+        style={{ width: '100%', height: 360 }}
+      />
+    ),
+  },
+);
 
-  const fmt = (v: number | null) => formatMetricValue(v, metric);
-
-  return (
-    <div className="trend-chart-wrapper" style={{ width: '100%', height: 360 }}>
-      <ResponsiveContainer>
-        <LineChart data={chartData} margin={{ top: 8, right: 24, left: 16, bottom: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border, #333)" />
-          <XAxis
-            dataKey="date"
-            tick={{ fontSize: 12, fill: 'var(--muted, #888)' }}
-            tickFormatter={(d: string) => {
-              const date = new Date(d + 'T00:00:00');
-              return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            }}
-          />
-          <YAxis
-            tick={{ fontSize: 12, fill: 'var(--muted, #888)' }}
-            tickFormatter={(v: number) => fmt(v)}
-            width={72}
-          />
-          <Tooltip
-            formatter={(value, name) => [
-              fmt(typeof value === 'number' ? value : null),
-              name === 'primary' ? metricLabel : `${metricLabel} (comparison)`,
-            ]}
-            labelFormatter={(label) => String(label)}
-            contentStyle={{
-              background: 'var(--panel, #1a1a2e)',
-              border: '1px solid var(--panel-border, #333)',
-              borderRadius: 6,
-              fontSize: 13,
-            }}
-          />
-          {comparisonData && <Legend />}
-          <Line
-            type="monotone"
-            dataKey="primary"
-            name={metricLabel}
-            stroke="var(--accent, #1a6b64)"
-            strokeWidth={2}
-            dot={{ r: 3 }}
-            activeDot={{ r: 5 }}
-            connectNulls={false}
-          />
-          {comparisonData && (
-            <Line
-              type="monotone"
-              dataKey="comparison"
-              name={`${metricLabel} (comparison)`}
-              stroke="var(--danger, #a1363a)"
-              strokeWidth={2}
-              strokeDasharray="5 5"
-              dot={{ r: 3 }}
-              activeDot={{ r: 5 }}
-              connectNulls={false}
-            />
-          )}
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
+export function TrendChart(props: TrendChartProps) {
+  return <TrendChartInner {...props} />;
 }

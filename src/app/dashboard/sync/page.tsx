@@ -11,22 +11,9 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { formatTimestamp as formatTimestampBase } from '@/lib/format-utils';
 import { computeFreshness, type SyncLogRow } from '@/lib/sync/freshness';
 import { SyncNowButton } from '@/components/sync-now-button';
+import { Badge } from '@/components/badge';
 
 export const dynamic = 'force-dynamic';
-
-function FreshnessBadge({ state }: { state: string }) {
-  const colors: Record<string, string> = {
-    fresh: 'badge-fresh',
-    degraded: 'badge-degraded',
-    stale: 'badge-stale',
-  };
-
-  return (
-    <span className={`freshness-badge ${colors[state] ?? 'badge-stale'}`}>
-      {state.toUpperCase()}
-    </span>
-  );
-}
 
 function formatDuration(ms: number | null | undefined): string {
   if (ms === null || ms === undefined) return '-';
@@ -86,7 +73,7 @@ export default async function SyncHistoryPage() {
           <SyncNowButton />
         </div>
         <div className="freshness-info">
-          <FreshnessBadge state={freshness.state} />
+          <Badge variant="freshness" state={freshness.state} />
           <span className="data-as-of">
             Meta: {freshness.meta.lastSuccessAt ? formatTimestamp(freshness.meta.lastSuccessAt) : 'never'}
             {' | '}
@@ -127,9 +114,7 @@ export default async function SyncHistoryPage() {
                 <td>{log.source}</td>
                 <td>{log.stage}</td>
                 <td>
-                  <span className={`status-badge status-${log.status}`}>
-                    {log.status}
-                  </span>
+                  <Badge variant="status" status={log.status} />
                 </td>
                 <td>{formatDuration(log.duration_ms)}</td>
                 <td>{log.records_synced ?? '-'}</td>

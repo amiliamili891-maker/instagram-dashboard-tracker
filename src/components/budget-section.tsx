@@ -3,6 +3,8 @@
 import type { FreshnessState } from "@/lib/sync/freshness";
 import type { BudgetRecommendation } from "@/lib/intelligence/budget-advisor";
 import { ImageLightbox } from "@/components/image-lightbox";
+import { Badge } from "@/components/badge";
+import type { TierLabel, TierColor } from "@/lib/intelligence/tier-classifier";
 
 type RecWithName = BudgetRecommendation & { entityName?: string | null };
 
@@ -17,30 +19,6 @@ export interface BudgetApiData {
 export interface BudgetApiMeta {
   suppressed: boolean;
   reason?: string;
-}
-
-function ActionBadge({ action }: { action: string }) {
-  const cls =
-    action === "pause"
-      ? "budget-action-pause"
-      : action === "reduce"
-        ? "budget-action-reduce"
-        : action === "scale"
-          ? "budget-action-scale"
-          : "budget-action-maintain";
-  return (
-    <span className={`budget-action-badge ${cls}`}>
-      {action.toUpperCase()}
-    </span>
-  );
-}
-
-function TierBadge({ tier }: { tier: BudgetRecommendation["tier"] }) {
-  return (
-    <span className={`tier-badge tier-${tier.compositeColor}`}>
-      {tier.compositeTier}
-    </span>
-  );
 }
 
 function formatSpend(value: number): string {
@@ -164,10 +142,14 @@ export function BudgetSection({
                     </td>
                     <td>{formatSpend(rec.currentSpend)}</td>
                     <td>
-                      <TierBadge tier={rec.tier} />
+                      <Badge
+                        variant="tier"
+                        tier={rec.tier.compositeTier as TierLabel}
+                        color={rec.tier.compositeColor as TierColor}
+                      />
                     </td>
                     <td>
-                      <ActionBadge action={rec.action} />
+                      <Badge variant="budget-action" action={rec.action} />
                     </td>
                     <td>
                       {rec.suggestedSpend !== null
@@ -212,10 +194,14 @@ export function BudgetSection({
                     </td>
                     <td>{formatSpend(rec.currentSpend)}</td>
                     <td>
-                      <TierBadge tier={rec.tier} />
+                      <Badge
+                        variant="tier"
+                        tier={rec.tier.compositeTier as TierLabel}
+                        color={rec.tier.compositeColor as TierColor}
+                      />
                     </td>
                     <td>
-                      <ActionBadge action={rec.action} />
+                      <Badge variant="budget-action" action={rec.action} />
                     </td>
                     <td>
                       {rec.suggestedSpend !== null

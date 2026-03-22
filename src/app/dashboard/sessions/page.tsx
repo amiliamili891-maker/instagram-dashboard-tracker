@@ -12,6 +12,7 @@ import { formatTimestamp } from '@/lib/format-utils';
 import { SessionControls } from './session-controls';
 import { CsvExportButton } from '@/components/csv-export-button';
 import Link from 'next/link';
+import { Badge } from '@/components/badge';
 
 export const dynamic = 'force-dynamic';
 
@@ -271,9 +272,7 @@ export default async function SessionsPage({
                   <td>{s.city || '-'}</td>
                   <td className="funnel-cell">
                     {funnelBadges(s).map((badge) => (
-                      <span key={badge} className={`funnel-badge funnel-${badge}`}>
-                        {badge}
-                      </span>
+                      <Badge key={badge} variant="funnel" step={badge} />
                     ))}
                   </td>
                 </tr>

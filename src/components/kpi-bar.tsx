@@ -3,6 +3,24 @@
  * Data is fetched by the page and passed as props.
  */
 
+/**
+ * KpiBarSkeleton — Suspense fallback for the KPI bar.
+ * Renders 5 placeholder cards matching the KPI bar layout.
+ */
+export function KpiBarSkeleton({ count = 5 }: { count?: number }) {
+  return (
+    <div className="kpi-bar" role="status" aria-label="Loading KPI data">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="kpi-card kpi-card-skeleton">
+          <div className="skeleton-cell" style={{ width: '60%', height: 12 }} />
+          <div className="skeleton-cell" style={{ width: '40%', height: 24 }} />
+          <div className="skeleton-cell" style={{ width: '30%', height: 12 }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export interface KpiItem {
   metric: string;
   label: string;

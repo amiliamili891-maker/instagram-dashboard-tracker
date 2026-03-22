@@ -1,41 +1,12 @@
-// NOTE: The entity table rendering in this file is duplicated in:
-//   - src/app/dashboard/campaigns/campaign-list.tsx
-//   - src/app/dashboard/campaigns/[id]/campaign-detail.tsx
-// When modifying the table structure, keep all three files in sync.
-
 "use client";
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getDateRanges, isValidPeriod } from "@/lib/date-utils";
-import { fmt } from "@/lib/format-utils";
-import { SparklineCell } from "@/components/sparkline-cell";
-import { TierBadge } from "@/components/tier-badge";
+import { EntityTable, type EntityRow, type TierInfo } from "@/components/entity-table";
 import { ImageLightbox } from "@/components/image-lightbox";
-import { useTableSort } from "@/hooks/use-table-sort";
-import { SortableTh } from "@/components/sortable-th";
 import type { TierLabel, TierColor } from "@/lib/intelligence/tier-classifier";
-
-interface AdRow {
-  ad_id: string;
-  ad_name: string;
-  spend: number;
-  impressions: number;
-  clicks: number;
-  chats: number;
-  visits: number;
-  reveals: number;
-  cost_per_chat: number | null;
-  chat_rate: number | null;
-  reveal_rate: number | null;
-  dailyCostPerChat: (number | null)[];
-}
-
-interface TierInfo {
-  tier: TierLabel;
-  color: TierColor;
-}
 
 export function AdsetDetail({ adsetId }: { adsetId: string }) {
   const searchParams = useSearchParams();
@@ -44,7 +15,7 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
   const [adsetName, setAdsetName] = useState(adsetId);
   const [campaignId, setCampaignId] = useState("");
   const [campaignName, setCampaignName] = useState("");
-  const [rows, setRows] = useState<AdRow[]>([]);
+  const [rows, setRows] = useState<EntityRow[]>([]);
   const [tiers, setTiers] = useState<Map<string, TierInfo>>(new Map());
   const [loading, setLoading] = useState(true);
 
@@ -107,7 +78,7 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
           dayMap.set(date, dayData);
         }
 
-        const result: AdRow[] = Array.from(adAgg.entries()).map(([adId, a]) => {
+        const result: EntityRow[] = Array.from(adAgg.entries()).map(([adId, a]) => {
           const dayMap = daily.get(adId);
           let dailyCostPerChat: (number | null)[] = [];
           if (dayMap) {
@@ -119,8 +90,8 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
           }
 
           return {
-            ad_id: adId,
-            ad_name: adNames.get(adId) ?? adId,
+            id: adId,
+            name: adNames.get(adId) ?? adId,
             spend: a.spend,
             impressions: a.impressions,
             clicks: a.clicks,
@@ -143,15 +114,7 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
       });
   }, [period, adsetId]);
 
-  const { sortedRows, sortKey, sortDir, onSort } = useTableSort<AdRow, keyof AdRow>(
-    rows,
-    "spend",
-    "desc",
-  );
-
   if (loading) return <div className="table-loading">Loading ads...</div>;
-
-  const sortProps = { activeSortKey: sortKey as string, sortDir, onSort: onSort as (key: string) => void };
 
   return (
     <>
@@ -171,74 +134,15 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
       <h1 className="page-title">{adsetName}</h1>
       <h2 className="section-title">Ads</h2>
 
-      {rows.length === 0 ? (
-        <div className="table-empty">No ads found for this adset and period.</div>
-      ) : (
-        <div className="table-wrapper">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th className="thumbnail-cell"></th>
-                <SortableTh label="Ad" sortKey="ad_name" {...sortProps} />
-                <th>Tier</th>
-                <th>Cost/Chat Trend</th>
-                <SortableTh label="Spend" sortKey="spend" {...sortProps} />
-                <SortableTh label="Cost/Chat" sortKey="cost_per_chat" {...sortProps} />
-                <SortableTh label="Chat Rate" sortKey="chat_rate" {...sortProps} />
-                <SortableTh label="Reveal Rate" sortKey="reveal_rate" {...sortProps} />
-                <SortableTh label="Chats" sortKey="chats" {...sortProps} />
-                <SortableTh label="Visits" sortKey="visits" {...sortProps} />
-                <SortableTh label="Reveals" sortKey="reveals" {...sortProps} />
-                <SortableTh label="Impressions" sortKey="impressions" {...sortProps} />
-                <SortableTh label="Clicks" sortKey="clicks" {...sortProps} />
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRows.map((row) => {
-                const tierInfo = tiers.get(row.ad_id);
-                return (
-                  <tr key={row.ad_id}>
-                    <td className="thumbnail-cell">
-                      <ImageLightbox adId={row.ad_id} size="sm" />
-                    </td>
-                    <td>
-                      <Link
-                        href={`/dashboard/ads/${row.ad_id}?period=${period}`}
-                        className="entity-link"
-                      >
-                        {row.ad_name}
-                      </Link>
-                    </td>
-                    <td>
-                      {tierInfo ? (
-                        <TierBadge tier={tierInfo.tier} color={tierInfo.color} />
-                      ) : (
-                        <span className="tier-badge tier-gray">--</span>
-                      )}
-                    </td>
-                    <td className="sparkline-cell">
-                      {row.dailyCostPerChat.length >= 2 ? (
-                        <SparklineCell data={row.dailyCostPerChat} />
-                      ) : (
-                        <span style={{ color: "var(--muted)", fontSize: "0.75rem" }}>--</span>
-                      )}
-                    </td>
-                    <td>{fmt(row.spend, "currency")}</td>
-                    <td>{fmt(row.cost_per_chat, "currency")}</td>
-                    <td>{fmt(row.chat_rate, "percent")}</td>
-                    <td>{fmt(row.reveal_rate, "percent")}</td>
-                    <td>{fmt(row.chats, "number")}</td>
-                    <td>{fmt(row.visits, "number")}</td>
-                    <td>{fmt(row.reveals, "number")}</td>
-                    <td>{fmt(row.impressions, "number")}</td>
-                    <td>{fmt(row.clicks, "number")}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <EntityTable
+        rows={rows}
+        tiers={tiers}
+        period={period}
+        nameLabel="Ad"
+        buildHref={(row, p) => `/dashboard/ads/${row.id}?period=${p}`}
+        renderThumbnail={(row) => <ImageLightbox adId={row.id} size="sm" />}
+        emptyMessage="No ads found for this adset and period."
+      />
     </>
   );
 }

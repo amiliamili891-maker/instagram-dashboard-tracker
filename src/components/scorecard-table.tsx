@@ -5,6 +5,15 @@ import { ImageLightbox } from "@/components/image-lightbox";
 import { fmt } from "@/lib/format-utils";
 import { useTableSort } from "@/hooks/use-table-sort";
 import { SortableTh } from "@/components/sortable-th";
+import { SkeletonTable } from "@/components/skeleton-table";
+
+/**
+ * ScorecardSkeleton — Suspense fallback for the scorecard table.
+ * Matches the scorecard table layout: 13 columns, 8 placeholder rows.
+ */
+export function ScorecardSkeleton() {
+  return <SkeletonTable columns={13} rows={8} showHeader />;
+}
 
 export interface AdRow {
   entity_id: string;

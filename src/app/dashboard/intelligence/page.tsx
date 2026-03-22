@@ -30,6 +30,7 @@ import {
 import { type FreshnessState } from '@/lib/sync/freshness';
 import { ImageLightbox } from '@/components/image-lightbox';
 import { SectionCallout } from '@/components/section-callout';
+import { Badge } from '@/components/badge';
 
 // ---------------------------------------------------------------------------
 // Types for display
@@ -279,26 +280,15 @@ async function fetchMismatchResults(suppressed: boolean): Promise<(MismatchResul
 // Helper Components
 // ---------------------------------------------------------------------------
 
-function SeverityBadge({ severity }: { severity: string }) {
-  const colors: Record<string, string> = {
-    critical: 'badge-critical',
-    warning: 'badge-warning',
-    info: 'badge-info',
-  };
-  return (
-    <span className={`severity-badge ${colors[severity] ?? 'badge-info'}`}>
-      {severity}
-    </span>
-  );
-}
-
-function TierBadge({ data }: { data: Record<string, unknown> }) {
+function IntelligenceTierBadge({ data }: { data: Record<string, unknown> }) {
   const tier = (data.compositeTier as string) ?? 'Unknown';
   const color = (data.compositeColor as string) ?? 'gray';
   return (
-    <span className={`tier-badge tier-${color}`}>
-      {tier}
-    </span>
+    <Badge
+      variant="tier"
+      tier={tier as import('@/lib/intelligence/tier-classifier').TierLabel}
+      color={color as import('@/lib/intelligence/tier-classifier').TierColor}
+    />
   );
 }
 
@@ -306,11 +296,11 @@ function AlertCard({ alert }: { alert: AlertRow }) {
   return (
     <div className={`alert-card alert-${alert.severity}`}>
       <div className="alert-header">
-        <SeverityBadge severity={alert.severity} />
+        <Badge variant="severity" severity={alert.severity} />
         <span className="alert-entity">
           {alert.entity_type} {alert.entity_id}
         </span>
-        {alert.alert_type === 'threshold' && <TierBadge data={alert.data} />}
+        {alert.alert_type === 'threshold' && <IntelligenceTierBadge data={alert.data} />}
       </div>
       <p className="alert-message">{alert.message}</p>
       <time className="alert-time">
@@ -331,20 +321,6 @@ function EmptyState({ title, message }: { title: string; message: string }) {
   );
 }
 
-function ActionBadge({ action }: { action: string }) {
-  const colors: Record<string, string> = {
-    pause: 'badge-action-pause',
-    reduce: 'badge-action-reduce',
-    scale: 'badge-action-scale',
-    increase: 'badge-action-scale',
-    maintain: 'badge-action-maintain',
-  };
-  return (
-    <span className={`action-badge ${colors[action] ?? 'badge-action-maintain'}`}>
-      {action}
-    </span>
-  );
-}
 
 function BudgetRecCard({ rec }: { rec: BudgetRecommendation & { entityName?: string | null } }) {
   const actionLabel =
@@ -358,10 +334,12 @@ function BudgetRecCard({ rec }: { rec: BudgetRecommendation & { entityName?: str
     <div className={`budget-rec-card budget-rec-${rec.action}`}>
       <div className="budget-rec-header">
         <ImageLightbox adId={rec.entityId} size="md" />
-        <ActionBadge action={rec.action} />
-        <span className={`tier-badge tier-${rec.tier.compositeColor}`}>
-          {rec.tier.compositeTier}
-        </span>
+        <Badge variant="action" action={rec.action} />
+        <Badge
+          variant="tier"
+          tier={rec.tier.compositeTier as import('@/lib/intelligence/tier-classifier').TierLabel}
+          color={rec.tier.compositeColor as import('@/lib/intelligence/tier-classifier').TierColor}
+        />
       </div>
       <div className="budget-rec-entity">
         <span className="budget-rec-id" title={rec.entityId}>
@@ -386,14 +364,6 @@ function BudgetRecCard({ rec }: { rec: BudgetRecommendation & { entityName?: str
   );
 }
 
-function MismatchPatternBadge({ pattern }: { pattern: string }) {
-  const isOrange = pattern === 'high_click_low_chat';
-  return (
-    <span className={`mismatch-pattern-badge ${isOrange ? 'mismatch-badge-orange' : 'mismatch-badge-yellow'}`}>
-      {isOrange ? 'Click > Chat' : 'Chat > Reveal'}
-    </span>
-  );
-}
 
 function MismatchMetricDisplay({ metric }: { metric: Mismatch['metrics'][number] }) {
   const arrow = metric.assessment === 'high' ? '\u2191' : '\u2193';
@@ -411,7 +381,7 @@ function MismatchCard({ mismatch, entityName }: { mismatch: Mismatch; entityName
     <div className={`mismatch-card mismatch-${mismatch.pattern}`}>
       <div className="mismatch-header">
         <ImageLightbox adId={mismatch.entityId} size="md" />
-        <MismatchPatternBadge pattern={mismatch.pattern} />
+        <Badge variant="mismatch-pattern" pattern={mismatch.pattern} />
       </div>
       <div className="mismatch-entity">
         <span className="mismatch-entity-name" title={mismatch.entityId}>
