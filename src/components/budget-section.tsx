@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import type { FreshnessState } from "@/lib/sync/freshness";
 import type { BudgetRecommendation } from "@/lib/intelligence/budget-advisor";
 
+type RecWithName = BudgetRecommendation & { entityName?: string | null };
+
 interface BudgetApiResponse {
   data: {
-    recommendations: BudgetRecommendation[];
-    pauseCandidates: BudgetRecommendation[];
-    scaleCandidates: BudgetRecommendation[];
+    recommendations: RecWithName[];
+    pauseCandidates: RecWithName[];
+    scaleCandidates: RecWithName[];
     totalCurrentSpend: number;
     suggestedReallocation: number;
   };
@@ -184,7 +186,9 @@ export function BudgetSection({
               <tbody>
                 {pauseCandidates.map((rec) => (
                   <tr key={rec.entityId}>
-                    <td className="id-cell">{rec.entityId.slice(0, 12)}...</td>
+                    <td className="ad-name-cell" title={rec.entityId}>
+                      {rec.entityName || rec.entityId.slice(0, 12) + "..."}
+                    </td>
                     <td>{formatSpend(rec.currentSpend)}</td>
                     <td>
                       <TierBadge tier={rec.tier} />
@@ -226,7 +230,9 @@ export function BudgetSection({
               <tbody>
                 {scaleCandidates.map((rec) => (
                   <tr key={rec.entityId}>
-                    <td className="id-cell">{rec.entityId.slice(0, 12)}...</td>
+                    <td className="ad-name-cell" title={rec.entityId}>
+                      {rec.entityName || rec.entityId.slice(0, 12) + "..."}
+                    </td>
                     <td>{formatSpend(rec.currentSpend)}</td>
                     <td>
                       <TierBadge tier={rec.tier} />

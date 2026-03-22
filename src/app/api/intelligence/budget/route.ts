@@ -119,6 +119,31 @@ export async function GET() {
 
     const result = await generateBudgetRecommendations(persistence);
 
+    // Resolve entity names from ads/adsets/campaigns tables
+    const entityIds = result.recommendations.map((r) => r.entityId);
+    if (entityIds.length > 0) {
+      const { data: ads } = await serviceClient
+        .from('ads')
+        .select('id, name')
+        .in('id', entityIds);
+
+      const nameMap = new Map<string, string>();
+      for (const ad of ads ?? []) {
+        nameMap.set(ad.id, ad.name);
+      }
+
+      // Attach names to recommendations
+      for (const rec of result.recommendations) {
+        (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
+      }
+      for (const rec of result.pauseCandidates) {
+        (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
+      }
+      for (const rec of result.scaleCandidates) {
+        (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
+      }
+    }
+
     return Response.json({
       data: result,
       meta: {

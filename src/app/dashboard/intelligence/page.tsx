@@ -165,7 +165,32 @@ async function fetchBudgetRecommendations(suppressed: boolean): Promise<BudgetRe
   };
 
   try {
-    return await generateBudgetRecommendations(persistence);
+    const result = await generateBudgetRecommendations(persistence);
+
+    // Resolve ad names
+    const entityIds = result.recommendations.map((r) => r.entityId);
+    if (entityIds.length > 0) {
+      const { data: ads } = await supabase
+        .from('ads')
+        .select('id, name')
+        .in('id', entityIds);
+
+      const nameMap = new Map<string, string>();
+      for (const ad of ads ?? []) {
+        nameMap.set(ad.id, ad.name);
+      }
+      for (const rec of result.recommendations) {
+        (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
+      }
+      for (const rec of result.pauseCandidates) {
+        (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
+      }
+      for (const rec of result.scaleCandidates) {
+        (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
+      }
+    }
+
+    return result;
   } catch (err) {
     console.error('Budget recommendations fetch error:', err);
     return null;
@@ -243,7 +268,7 @@ function ActionBadge({ action }: { action: string }) {
   );
 }
 
-function BudgetRecCard({ rec }: { rec: BudgetRecommendation }) {
+function BudgetRecCard({ rec }: { rec: BudgetRecommendation & { entityName?: string | null } }) {
   const actionLabel =
     rec.action === 'pause' ? 'Pause and reallocate' :
     rec.action === 'reduce' ? 'Reduce spend' :
@@ -260,7 +285,9 @@ function BudgetRecCard({ rec }: { rec: BudgetRecommendation }) {
         </span>
       </div>
       <div className="budget-rec-entity">
-        <span className="budget-rec-id">{rec.entityId}</span>
+        <span className="budget-rec-id" title={rec.entityId}>
+          {rec.entityName || rec.entityId}
+        </span>
         <span className="budget-rec-level">{rec.entityLevel}</span>
       </div>
       <div className="budget-rec-spend">

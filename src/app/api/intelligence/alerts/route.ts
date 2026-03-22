@@ -65,10 +65,52 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Resolve entity names
+    const rows = data ?? [];
+    const entityIds = [...new Set(rows.map((r: Record<string, unknown>) => r.entity_id as string))];
+    const nameMap: Record<string, string> = {};
+
+    if (entityIds.length > 0) {
+      const { data: ads } = await serviceClient
+        .from('ads')
+        .select('id, name')
+        .in('id', entityIds);
+      for (const ad of ads ?? []) {
+        nameMap[ad.id] = ad.name;
+      }
+      // Also try campaigns and adsets for non-ad entities
+      const unmapped = entityIds.filter((id) => !nameMap[id]);
+      if (unmapped.length > 0) {
+        const { data: campaigns } = await serviceClient
+          .from('campaigns')
+          .select('id, name')
+          .in('id', unmapped);
+        for (const c of campaigns ?? []) {
+          nameMap[c.id] = c.name;
+        }
+      }
+      const stillUnmapped = entityIds.filter((id) => !nameMap[id]);
+      if (stillUnmapped.length > 0) {
+        const { data: adsets } = await serviceClient
+          .from('adsets')
+          .select('id, name')
+          .in('id', stillUnmapped);
+        for (const a of adsets ?? []) {
+          nameMap[a.id] = a.name;
+        }
+      }
+
+      // Attach names to rows
+      for (const row of rows) {
+        (row as Record<string, unknown>).entity_name =
+          nameMap[(row as Record<string, unknown>).entity_id as string] ?? null;
+      }
+    }
+
     return Response.json({
-      data: data ?? [],
+      data: rows,
       meta: {
-        count: data?.length ?? 0,
+        count: rows.length,
         filters: { type: alertType, severity },
       },
     });

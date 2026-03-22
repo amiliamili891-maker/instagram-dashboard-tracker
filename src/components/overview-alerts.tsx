@@ -7,6 +7,7 @@ interface AlertRow {
   id: string;
   entity_type: string;
   entity_id: string;
+  entity_name?: string | null;
   alert_type: string;
   severity: string;
   message: string;
@@ -88,8 +89,8 @@ export function OverviewAlerts() {
               {alert.severity}
             </span>
             <span className="overview-alert-message">{alert.message}</span>
-            <span className="overview-alert-entity">
-              {alert.entity_type} {alert.entity_id.slice(0, 8)}...
+            <span className="overview-alert-entity" title={alert.entity_id}>
+              {alert.entity_type}: {alert.entity_name || alert.entity_id.slice(0, 12) + "..."}
             </span>
           </div>
         ))}
