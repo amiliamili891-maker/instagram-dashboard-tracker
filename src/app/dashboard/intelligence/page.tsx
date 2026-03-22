@@ -21,6 +21,13 @@ import {
   type BudgetPersistence,
   type BudgetEntityInput,
 } from '@/lib/intelligence/budget-advisor';
+import {
+  detectMismatches,
+  type Mismatch,
+  type MismatchResult,
+  type MismatchPersistence,
+  type MismatchEntityInput,
+} from '@/lib/intelligence/mismatch-detector';
 import { type FreshnessState } from '@/lib/sync/freshness';
 
 // ---------------------------------------------------------------------------
@@ -198,6 +205,85 @@ async function fetchBudgetRecommendations(suppressed: boolean): Promise<BudgetRe
 }
 
 // ---------------------------------------------------------------------------
+// Mismatch Data Fetching
+// ---------------------------------------------------------------------------
+
+async function fetchMismatchResults(suppressed: boolean): Promise<(MismatchResult & { entityNames: Map<string, string> }) | null> {
+  if (suppressed) return null;
+
+  const env = getServerEnv();
+  const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const persistence: MismatchPersistence = {
+    async fetchEntitiesForMismatch(): Promise<MismatchEntityInput[]> {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
+      const dateTo = new Date().toISOString().slice(0, 10);
+
+      const { data, error } = await supabase
+        .from('daily_combined_stats')
+        .select('entity_id, entity_level, visits, chat_rate, reveal_rate, reveal_click_through_rate')
+        .gte('report_date', dateFrom)
+        .lte('report_date', dateTo)
+        .eq('entity_level', 'ad');
+
+      if (error || !data) return [];
+
+      // Aggregate by entity (sum visits, use latest rates)
+      const entityMap = new Map<string, MismatchEntityInput>();
+      for (const row of data) {
+        const key = `${row.entity_id}:${row.entity_level}`;
+        const existing = entityMap.get(key);
+        if (existing) {
+          existing.visits += row.visits ?? 0;
+          // Keep latest non-null rates (rows are ordered by date)
+          if (row.chat_rate !== null) existing.chat_rate = row.chat_rate;
+          if (row.reveal_rate !== null) existing.reveal_rate = row.reveal_rate;
+          if (row.reveal_click_through_rate !== null) existing.reveal_click_through_rate = row.reveal_click_through_rate;
+        } else {
+          entityMap.set(key, {
+            entityId: row.entity_id,
+            entityLevel: row.entity_level,
+            visits: row.visits ?? 0,
+            chat_rate: row.chat_rate,
+            reveal_rate: row.reveal_rate,
+            reveal_click_through_rate: row.reveal_click_through_rate,
+          });
+        }
+      }
+
+      return Array.from(entityMap.values());
+    },
+  };
+
+  try {
+    const result = await detectMismatches(persistence);
+
+    // Resolve ad names
+    const entityIds = result.mismatches.map((m) => m.entityId);
+    const entityNames = new Map<string, string>();
+    if (entityIds.length > 0) {
+      const { data: ads } = await supabase
+        .from('ads')
+        .select('id, name')
+        .in('id', entityIds);
+
+      for (const ad of ads ?? []) {
+        entityNames.set(ad.id, ad.name);
+      }
+    }
+
+    return { ...result, entityNames };
+  } catch (err) {
+    console.error('Mismatch detection fetch error:', err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Helper Components
 // ---------------------------------------------------------------------------
 
@@ -307,6 +393,78 @@ function BudgetRecCard({ rec }: { rec: BudgetRecommendation & { entityName?: str
   );
 }
 
+function MismatchPatternBadge({ pattern }: { pattern: string }) {
+  const isOrange = pattern === 'high_click_low_chat';
+  return (
+    <span className={`mismatch-pattern-badge ${isOrange ? 'mismatch-badge-orange' : 'mismatch-badge-yellow'}`}>
+      {isOrange ? 'Click > Chat' : 'Chat > Reveal'}
+    </span>
+  );
+}
+
+function MismatchMetricDisplay({ metric }: { metric: Mismatch['metrics'][number] }) {
+  const arrow = metric.assessment === 'high' ? '\u2191' : '\u2193';
+  return (
+    <span className="mismatch-metric">
+      <span className="mismatch-metric-label">{metric.label}:</span>
+      <span className="mismatch-metric-value">{(metric.value * 100).toFixed(1)}%</span>
+      <span className={`mismatch-metric-arrow assessment-${metric.assessment}`}>{arrow}</span>
+    </span>
+  );
+}
+
+function MismatchCard({ mismatch, entityName }: { mismatch: Mismatch; entityName: string | null }) {
+  return (
+    <div className={`mismatch-card mismatch-${mismatch.pattern}`}>
+      <div className="mismatch-header">
+        <MismatchPatternBadge pattern={mismatch.pattern} />
+      </div>
+      <div className="mismatch-entity">
+        <span className="mismatch-entity-name" title={mismatch.entityId}>
+          {entityName || mismatch.entityId}
+        </span>
+        <span className="mismatch-entity-level">{mismatch.entityLevel}</span>
+      </div>
+      <div className="mismatch-metrics">
+        {mismatch.metrics.map((m) => (
+          <MismatchMetricDisplay key={m.name} metric={m} />
+        ))}
+      </div>
+      <p className="mismatch-message">{mismatch.message}</p>
+      <p className="mismatch-recommendation">{mismatch.recommendation}</p>
+    </div>
+  );
+}
+
+function MismatchSection({ result }: { result: MismatchResult & { entityNames: Map<string, string> } }) {
+  return (
+    <div className="intelligence-section mismatch-section">
+      <div className="mismatch-section-header">
+        <h2>Creative-Funnel Mismatches</h2>
+        {result.mismatches.length > 0 && (
+          <span className="budget-count">{result.mismatches.length}</span>
+        )}
+      </div>
+      {result.mismatches.length === 0 ? (
+        <EmptyState
+          title="No creative-funnel mismatches detected"
+          message="Metrics are balanced across all ads."
+        />
+      ) : (
+        <div className="mismatch-grid">
+          {result.mismatches.map((mismatch, idx) => (
+            <MismatchCard
+              key={`${mismatch.entityId}-${mismatch.pattern}-${idx}`}
+              mismatch={mismatch}
+              entityName={result.entityNames.get(mismatch.entityId) ?? null}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BudgetRecommendationsSection({ budget }: { budget: BudgetResult }) {
   const { pauseCandidates, scaleCandidates, suggestedReallocation, totalCurrentSpend } = budget;
 
@@ -402,8 +560,11 @@ export default async function IntelligencePage() {
     );
   }
 
-  // Fetch budget recommendations (suppressed when alerts are suppressed)
-  const budgetResult = await fetchBudgetRecommendations(suppressed);
+  // Fetch budget recommendations and mismatch results (suppressed when alerts are suppressed)
+  const [budgetResult, mismatchResult] = await Promise.all([
+    fetchBudgetRecommendations(suppressed),
+    fetchMismatchResults(suppressed),
+  ]);
 
   return (
     <section className="intelligence-page">
@@ -459,6 +620,9 @@ export default async function IntelligencePage() {
           </div>
         )}
       </div>
+
+      {/* Creative-Funnel Mismatches */}
+      {mismatchResult && <MismatchSection result={mismatchResult} />}
 
       {/* Budget Recommendations */}
       {budgetResult && <BudgetRecommendationsSection budget={budgetResult} />}

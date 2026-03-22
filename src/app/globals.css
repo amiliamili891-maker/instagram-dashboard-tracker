@@ -1356,10 +1356,154 @@ a {
 .badge-action-scale { background: rgba(26, 107, 100, 0.15); color: var(--accent); }
 .badge-action-maintain { background: rgba(93, 107, 112, 0.12); color: var(--muted); }
 
+/* ---- Creative-Funnel Mismatches ---- */
+
+.mismatch-section {
+  margin-bottom: 2rem;
+}
+
+.mismatch-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.mismatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: 0.75rem;
+}
+
+.mismatch-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  background: var(--panel);
+  padding: 1rem;
+}
+
+.mismatch-card.mismatch-high_click_low_chat {
+  border-left: 3px solid #c87832;
+}
+
+.mismatch-card.mismatch-high_chat_low_reveal {
+  border-left: 3px solid #b8860b;
+}
+
+.mismatch-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.mismatch-pattern-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mismatch-pattern-badge.mismatch-badge-orange {
+  background: rgba(200, 120, 50, 0.2);
+  color: #8a5a1b;
+}
+
+.mismatch-pattern-badge.mismatch-badge-yellow {
+  background: rgba(200, 150, 50, 0.2);
+  color: #8a6d1b;
+}
+
+.mismatch-entity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.mismatch-entity-name {
+  font-family: monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 20rem;
+}
+
+.mismatch-entity-level {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.2rem;
+  background: rgba(21, 32, 37, 0.06);
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.mismatch-metrics {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.mismatch-metric {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+}
+
+.mismatch-metric-label {
+  color: var(--muted);
+}
+
+.mismatch-metric-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.mismatch-metric-arrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.mismatch-metric-arrow.assessment-high {
+  color: var(--accent-strong);
+}
+
+.mismatch-metric-arrow.assessment-low {
+  color: var(--danger);
+}
+
+.mismatch-message {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.mismatch-recommendation {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.45;
+  font-style: italic;
+}
+
 @media (max-width: 640px) {
   .alert-grid,
-  .budget-rec-grid {
+  .budget-rec-grid,
+  .mismatch-grid {
     grid-template-columns: 1fr;
+  }
+
+  .mismatch-metrics {
+    flex-direction: column;
+    gap: 0.3rem;
   }
 }
 
