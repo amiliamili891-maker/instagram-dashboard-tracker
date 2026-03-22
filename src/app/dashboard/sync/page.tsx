@@ -7,8 +7,7 @@
  * Auth is handled by the dashboard layout (requireAdminUser).
  */
 
-import { createClient } from '@supabase/supabase-js';
-import { getServerEnv } from '@/lib/env';
+import { createServiceClient } from '@/lib/supabase/service';
 import { computeFreshness, type SyncLogRow } from '@/lib/sync/freshness';
 import { SyncNowButton } from '@/components/sync-now-button';
 
@@ -66,10 +65,7 @@ interface SyncLogDisplay {
 }
 
 export default async function SyncHistoryPage() {
-  const env = getServerEnv();
-  const serviceClient = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const serviceClient = createServiceClient();
 
   // Fetch last 50 sync log entries
   const { data: rawLogs, error } = await serviceClient

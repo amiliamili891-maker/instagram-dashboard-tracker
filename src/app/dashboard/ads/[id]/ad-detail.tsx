@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getDateRanges, isValidPeriod } from "@/lib/date-utils";
-import { AdThumbnail } from "@/components/ad-thumbnail";
+import { ImageLightbox } from "@/components/image-lightbox";
 import { fmt } from "@/lib/format-utils";
 
 interface AdMetrics {
@@ -146,7 +146,7 @@ export function AdDetail({ adId }: { adId: string }) {
         <span>{metrics.ad_name}</span>
       </div>
       <div className="ad-detail-header" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-        <AdThumbnail adId={adId} size="lg" />
+        <ImageLightbox adId={adId} size="lg" />
         <h1 className="page-title">{metrics.ad_name}</h1>
       </div>
 

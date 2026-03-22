@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { FreshnessState } from "@/lib/sync/freshness";
 import type { BudgetRecommendation } from "@/lib/intelligence/budget-advisor";
+import { AdThumbnail } from "@/components/ad-thumbnail";
 
 type RecWithName = BudgetRecommendation & { entityName?: string | null };
 
@@ -175,6 +176,7 @@ export function BudgetSection({
             <table className="budget-table">
               <thead>
                 <tr>
+                  <th></th>
                   <th>Ad</th>
                   <th>Spend</th>
                   <th>Tier</th>
@@ -186,6 +188,9 @@ export function BudgetSection({
               <tbody>
                 {pauseCandidates.map((rec) => (
                   <tr key={rec.entityId}>
+                    <td className="thumbnail-cell">
+                      <AdThumbnail adId={rec.entityId} size="md" />
+                    </td>
                     <td className="ad-name-cell" title={rec.entityId}>
                       {rec.entityName || rec.entityId.slice(0, 12) + "..."}
                     </td>
@@ -219,6 +224,7 @@ export function BudgetSection({
             <table className="budget-table">
               <thead>
                 <tr>
+                  <th></th>
                   <th>Ad</th>
                   <th>Spend</th>
                   <th>Tier</th>
@@ -230,6 +236,9 @@ export function BudgetSection({
               <tbody>
                 {scaleCandidates.map((rec) => (
                   <tr key={rec.entityId}>
+                    <td className="thumbnail-cell">
+                      <AdThumbnail adId={rec.entityId} size="md" />
+                    </td>
                     <td className="ad-name-cell" title={rec.entityId}>
                       {rec.entityName || rec.entityId.slice(0, 12) + "..."}
                     </td>

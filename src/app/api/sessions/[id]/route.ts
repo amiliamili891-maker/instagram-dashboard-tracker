@@ -5,8 +5,7 @@
  */
 
 import { type NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { getServerEnv } from '@/lib/env';
+import { createServiceClient } from '@/lib/supabase/service';
 import { requireAdminUser } from '@/lib/auth/guards';
 
 export const dynamic = 'force-dynamic';
@@ -28,10 +27,7 @@ export async function GET(
   }
 
   try {
-    const env = getServerEnv();
-    const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const supabase = createServiceClient();
 
     const { data, error } = await supabase
       .from('sessions')

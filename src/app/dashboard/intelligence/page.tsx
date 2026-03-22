@@ -12,8 +12,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { createClient } from '@supabase/supabase-js';
-import { getServerEnv } from '@/lib/env';
+import { createServiceClient } from '@/lib/supabase/service';
 import {
   generateBudgetRecommendations,
   type BudgetResult,
@@ -29,6 +28,7 @@ import {
   type MismatchEntityInput,
 } from '@/lib/intelligence/mismatch-detector';
 import { type FreshnessState } from '@/lib/sync/freshness';
+import { AdThumbnail } from '@/components/ad-thumbnail';
 
 // ---------------------------------------------------------------------------
 // Types for display
@@ -56,10 +56,7 @@ async function fetchAlerts(): Promise<{
   suppressed: boolean;
   suppressionReason: string | null;
 }> {
-  const env = getServerEnv();
-  const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const supabase = createServiceClient();
 
   // Check freshness
   const { data: syncLogs } = await supabase
@@ -125,10 +122,7 @@ async function fetchAlerts(): Promise<{
 async function fetchBudgetRecommendations(suppressed: boolean): Promise<BudgetResult | null> {
   if (suppressed) return null;
 
-  const env = getServerEnv();
-  const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const supabase = createServiceClient();
 
   const persistence: BudgetPersistence = {
     async fetchEntitiesWithSpend(): Promise<BudgetEntityInput[]> {
@@ -211,10 +205,7 @@ async function fetchBudgetRecommendations(suppressed: boolean): Promise<BudgetRe
 async function fetchMismatchResults(suppressed: boolean): Promise<(MismatchResult & { entityNames: Record<string, string> }) | null> {
   if (suppressed) return null;
 
-  const env = getServerEnv();
-  const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const supabase = createServiceClient();
 
   const persistence: MismatchPersistence = {
     async fetchEntitiesForMismatch(): Promise<MismatchEntityInput[]> {
@@ -365,6 +356,7 @@ function BudgetRecCard({ rec }: { rec: BudgetRecommendation & { entityName?: str
   return (
     <div className={`budget-rec-card budget-rec-${rec.action}`}>
       <div className="budget-rec-header">
+        <AdThumbnail adId={rec.entityId} size="md" />
         <ActionBadge action={rec.action} />
         <span className={`tier-badge tier-${rec.tier.compositeColor}`}>
           {rec.tier.compositeTier}
@@ -417,6 +409,7 @@ function MismatchCard({ mismatch, entityName }: { mismatch: Mismatch; entityName
   return (
     <div className={`mismatch-card mismatch-${mismatch.pattern}`}>
       <div className="mismatch-header">
+        <AdThumbnail adId={mismatch.entityId} size="md" />
         <MismatchPatternBadge pattern={mismatch.pattern} />
       </div>
       <div className="mismatch-entity">

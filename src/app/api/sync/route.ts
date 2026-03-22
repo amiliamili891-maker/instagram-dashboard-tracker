@@ -5,12 +5,12 @@
  * Uses the sync orchestrator with deduplication lock.
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { timingSafeEqual } from 'crypto';
 import { materializeCombinedStats, type CombinePersistence } from '@/lib/sync/combine';
 import { getServerEnv } from '@/lib/env';
 import { isAdminEmail } from '@/lib/auth/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 import {
   runCombinedSync,
   type OrchestratorPersistence,
@@ -26,9 +26,7 @@ export const maxDuration = 120; // Sync needs time for Meta + Ghstly API calls
  * Used by both POST (manual) and GET (cron) handlers.
  */
 function buildSyncDeps(env: ReturnType<typeof getServerEnv>, syncType: SyncType, backfillDays: number) {
-  const serviceClient = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const serviceClient = createServiceClient();
 
   const persistence: OrchestratorPersistence = {
     async insertSyncLog(entry: OrchestratorSyncLog): Promise<void> {
@@ -231,6 +229,31 @@ export async function POST(request: Request) {
   const env = getServerEnv();
   if (!isAdminEmail(user.email, env.adminEmail)) {
     return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  // --- Cooldown check: reject if a sync completed within last 5 minutes ---
+  const cooldownClient = createServiceClient();
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const { data: recentSync } = await cooldownClient
+    .from('sync_logs')
+    .select('completed_at')
+    .eq('source', 'combined')
+    .eq('stage', 'orchestrate')
+    .eq('status', 'success')
+    .gte('completed_at', fiveMinAgo)
+    .order('completed_at', { ascending: false })
+    .limit(1);
+
+  if (recentSync && recentSync.length > 0) {
+    const lastCompleted = new Date(recentSync[0].completed_at);
+    const nextAllowed = new Date(lastCompleted.getTime() + 5 * 60 * 1000);
+    return Response.json(
+      {
+        error: 'Sync cooldown active',
+        message: `A sync completed at ${lastCompleted.toISOString()}. Next sync allowed after ${nextAllowed.toISOString()}.`,
+      },
+      { status: 429 },
+    );
   }
 
   // --- Parse request body ---

@@ -7,8 +7,7 @@
  * Auth is handled by the dashboard layout (requireAdminUser).
  */
 
-import { createClient } from '@supabase/supabase-js';
-import { getServerEnv } from '@/lib/env';
+import { createServiceClient } from '@/lib/supabase/service';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { TranscriptPanel } from './TranscriptPanel';
@@ -54,10 +53,7 @@ export default async function SessionDetailPage({
 }) {
   const { id } = await params;
 
-  const env = getServerEnv();
-  const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const supabase = createServiceClient();
 
   const { data: session, error } = await supabase
     .from('sessions')

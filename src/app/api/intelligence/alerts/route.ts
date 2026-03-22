@@ -10,10 +10,10 @@
  */
 
 import { type NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { getServerEnv } from '@/lib/env';
 import { isAdminEmail } from '@/lib/auth/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,9 +37,7 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '100', 10), 500);
 
   try {
-    const serviceClient = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const serviceClient = createServiceClient();
 
     let query = serviceClient
       .from('intelligence_alerts')

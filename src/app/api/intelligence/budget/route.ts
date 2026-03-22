@@ -7,10 +7,10 @@
  * Admin-only.
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { getServerEnv } from '@/lib/env';
 import { isAdminEmail } from '@/lib/auth/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 import {
   generateBudgetRecommendations,
   type BudgetPersistence,
@@ -35,9 +35,7 @@ export async function GET() {
   }
 
   try {
-    const serviceClient = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const serviceClient = createServiceClient();
 
     // Check freshness — suppress in degraded/stale
     const { data: syncLogs } = await serviceClient

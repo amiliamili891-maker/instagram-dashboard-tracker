@@ -212,9 +212,31 @@ describe("transformAd", () => {
       status: "ACTIVE",
       effective_status: "ACTIVE",
       creative_thumbnail_url: "https://example.com/thumb.jpg",
+      creative_image_url: null,
       sync_batch_id: "batch-uuid-1",
       source_payload: raw as unknown as Record<string, unknown>,
     });
+  });
+
+  it("transforms a raw Meta ad row with full image_url", () => {
+    const raw: MetaAdRow = {
+      id: "120243919935250528",
+      name: "AF_Ghstly_CMP0005_Set1_Ad1",
+      status: "ACTIVE",
+      effective_status: "ACTIVE",
+      campaign_id: "120243919935230528",
+      adset_id: "120243919935240528",
+      creative: {
+        id: "123456",
+        thumbnail_url: "https://example.com/thumb.jpg",
+        image_url: "https://example.com/full.jpg",
+      },
+    };
+
+    const result = transformAd(raw, "batch-uuid-1");
+
+    expect(result.creative_thumbnail_url).toBe("https://example.com/thumb.jpg");
+    expect(result.creative_image_url).toBe("https://example.com/full.jpg");
   });
 
   it("handles missing creative field", () => {
@@ -229,6 +251,7 @@ describe("transformAd", () => {
 
     const result = transformAd(raw, "batch-uuid-1");
     expect(result.creative_thumbnail_url).toBeNull();
+    expect(result.creative_image_url).toBeNull();
   });
 });
 

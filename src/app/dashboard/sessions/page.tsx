@@ -7,8 +7,7 @@
  * Auth is handled by the dashboard layout (requireAdminUser).
  */
 
-import { createClient } from '@supabase/supabase-js';
-import { getServerEnv } from '@/lib/env';
+import { createServiceClient } from '@/lib/supabase/service';
 import { SessionControls } from './session-controls';
 import Link from 'next/link';
 
@@ -84,10 +83,7 @@ export default async function SessionsPage({
   const adId = typeof resolvedParams.ad_id === 'string' ? resolvedParams.ad_id : undefined;
   const funnelStage = typeof resolvedParams.funnel_stage === 'string' ? resolvedParams.funnel_stage : undefined;
 
-  const env = getServerEnv();
-  const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const supabase = createServiceClient();
 
   const offset = (page - 1) * limit;
 

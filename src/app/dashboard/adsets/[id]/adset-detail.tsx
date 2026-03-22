@@ -1,3 +1,8 @@
+// NOTE: The entity table rendering in this file is duplicated in:
+//   - src/app/dashboard/campaigns/campaign-list.tsx
+//   - src/app/dashboard/campaigns/[id]/campaign-detail.tsx
+// When modifying the table structure, keep all three files in sync.
+
 "use client";
 
 import { useEffect, useState } from "react";

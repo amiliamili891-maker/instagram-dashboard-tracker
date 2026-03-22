@@ -61,6 +61,7 @@ export interface MetaAdRow {
   creative?: {
     id: string;
     thumbnail_url?: string;
+    image_url?: string;
   };
 }
 
@@ -204,7 +205,7 @@ export function createMetaClient(config: MetaClientConfig) {
       `${BASE_URL}/${accountId}/ads`,
       {
         fields:
-          "id,name,status,effective_status,campaign_id,adset_id,creative{id,thumbnail_url}",
+          "id,name,status,effective_status,campaign_id,adset_id,creative{id,thumbnail_url,image_url}",
         limit: "200",
       },
     );

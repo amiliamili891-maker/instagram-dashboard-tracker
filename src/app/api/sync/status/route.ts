@@ -5,17 +5,13 @@
  * freshness badges and "data as of" timestamps.
  */
 
-import { createClient } from '@supabase/supabase-js';
-import { getServerEnv } from '@/lib/env';
+import { createServiceClient } from '@/lib/supabase/service';
 import { computeFreshness, type SyncLogRow } from '@/lib/sync/freshness';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const env = getServerEnv();
-  const serviceClient = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const serviceClient = createServiceClient();
 
   // Fetch recent sync logs (last 24 hours should be more than enough)
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();

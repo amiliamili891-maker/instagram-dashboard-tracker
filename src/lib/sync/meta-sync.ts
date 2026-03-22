@@ -13,6 +13,7 @@
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { type SyncLogEntry } from './types';
 
 import {
   type MetaAdRow,
@@ -66,6 +67,7 @@ export interface AdRow {
   status: string | null;
   effective_status: string | null;
   creative_thumbnail_url: string | null;
+  creative_image_url: string | null;
   sync_batch_id: string;
   source_payload: Record<string, unknown>;
 }
@@ -88,22 +90,8 @@ export interface DailyMetaStatsRow {
   source_payload: Record<string, unknown>;
 }
 
-export interface SyncLogEntry {
-  sync_batch_id: string;
-  source: "meta";
-  stage: "orchestrate" | "fetch" | "persist" | "derive";
-  status: "running" | "success" | "failed" | "skipped";
-  started_at: string;
-  completed_at?: string;
-  duration_ms?: number;
-  records_synced?: number;
-  watermark_date?: string;
-  error_class?: string;
-  error_message?: string;
-  context?: Record<string, unknown>;
-  sync_type?: string;
-  triggered_by?: string;
-}
+/** Sync log entry — re-exported from canonical shared types */
+export type { SyncLogEntry } from './types';
 
 // ---------------------------------------------------------------------------
 // Transformation functions (exported for testing)
@@ -157,6 +145,7 @@ export function transformAd(
     status: raw.status ?? null,
     effective_status: raw.effective_status ?? null,
     creative_thumbnail_url: raw.creative?.thumbnail_url ?? null,
+    creative_image_url: raw.creative?.image_url ?? null,
     sync_batch_id: syncBatchId,
     source_payload: raw as unknown as Record<string, unknown>,
   };
@@ -505,6 +494,49 @@ async function cacheSingleThumbnail(
   }
 }
 
+async function cacheSingleFullImage(
+  supabase: SupabaseClient,
+  ad: MetaAdRow,
+): Promise<boolean> {
+  const imageUrl = ad.creative?.image_url;
+  if (!imageUrl) return false;
+
+  const storagePath = `${ad.id}/full.jpg`;
+
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) return false;
+
+    const contentType = response.headers.get("content-type") ?? "image/jpeg";
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const { error: uploadError } = await supabase.storage
+      .from("ad-creatives")
+      .upload(storagePath, buffer, { contentType, upsert: true });
+
+    if (uploadError) {
+      console.error(`Failed to cache full image for ad ${ad.id}:`, uploadError.message);
+      return false;
+    }
+
+    const { error: updateError } = await supabase
+      .from("ads")
+      .update({ creative_full_path: storagePath })
+      .eq("id", ad.id);
+
+    if (updateError) {
+      console.error(`Failed to update full image path for ad ${ad.id}:`, updateError.message);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error(`Full image cache error for ad ${ad.id}:`, err);
+    return false;
+  }
+}
+
 async function cacheCreativeThumbnails(
   supabase: SupabaseClient,
   ads: MetaAdRow[],
@@ -519,6 +551,15 @@ async function cacheCreativeThumbnails(
       batch.map((ad) => cacheSingleThumbnail(supabase, ad)),
     );
     cached += results.filter((r) => r.status === "fulfilled" && r.value).length;
+  }
+
+  // Also cache full-size images where available
+  const adsWithFullImages = ads.filter((a) => a.creative?.image_url);
+  for (let i = 0; i < adsWithFullImages.length; i += THUMBNAIL_CONCURRENCY) {
+    const batch = adsWithFullImages.slice(i, i + THUMBNAIL_CONCURRENCY);
+    await Promise.allSettled(
+      batch.map((ad) => cacheSingleFullImage(supabase, ad)),
+    );
   }
 
   return cached;

@@ -21,6 +21,7 @@ import type {
   GhstlyStatsResponse,
   JoinClassification,
 } from '@/lib/contracts/data-contract';
+import { type SyncLogEntry } from './types';
 import {
   normalizeSessionJoinKeys,
   classifyJoinability,
@@ -72,20 +73,8 @@ export interface SessionRow {
   join_issue: string | null;
 }
 
-/** Sync log entry */
-export interface SyncLogEntry {
-  sync_batch_id: string;
-  source: 'ghstly';
-  stage: string;
-  status: 'success' | 'error';
-  started_at: string;
-  completed_at: string;
-  duration_ms: number;
-  records_synced: number;
-  watermark_date: string | null;
-  error_class: string | null;
-  error_message: string | null;
-}
+/** Sync log entry — re-exported from canonical shared types */
+export type { SyncLogEntry } from './types';
 
 /** Result of a sync operation */
 export interface GhstlySyncResult {

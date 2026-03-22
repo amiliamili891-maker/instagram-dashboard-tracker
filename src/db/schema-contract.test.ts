@@ -99,3 +99,12 @@ describe("schema additions migration", () => {
     expect(sql).toContain("add column if not exists triggered_by text");
   });
 });
+
+describe("full-size creative image migration", () => {
+  it("adds creative_image_url and creative_full_path columns to ads", () => {
+    const sql = readAllMigrations();
+
+    expect(sql).toContain("add column if not exists creative_image_url text");
+    expect(sql).toContain("add column if not exists creative_full_path text");
+  });
+});
