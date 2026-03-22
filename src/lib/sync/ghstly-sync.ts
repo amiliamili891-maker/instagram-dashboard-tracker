@@ -102,6 +102,8 @@ export interface GhstlyPersistence {
   upsertDailyGhstlyStats(rows: DailyGhstlyStatsRow[]): Promise<void>;
   upsertSessions(rows: SessionRow[]): Promise<void>;
   insertSyncLog(entry: SyncLogEntry): Promise<void>;
+  /** Return the most recent session created_at we have stored (ISO string), or null */
+  getLatestSessionTimestamp?(): Promise<string | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +255,7 @@ async function fetchAllSessions(
 
 /**
  * Incremental sync: fetches current day + previous day stats and sessions.
+ * Uses watermark to only fetch sessions newer than what we already have.
  */
 export async function syncGhstlyIncremental(
   client: GhstlyClient,
@@ -262,11 +265,12 @@ export async function syncGhstlyIncremental(
   const today = getTodayLA();
   const yesterday = getDateDaysAgo(1);
 
-  return executeSyncForDateRange(client, persistence, syncBatchId, yesterday, today);
+  return executeSyncForDateRange(client, persistence, syncBatchId, yesterday, today, true);
 }
 
 /**
  * Backfill sync: fetches N days of stats and sessions (default 30).
+ * Does NOT use watermark — fetches all sessions in the date range.
  */
 export async function syncGhstlyBackfill(
   client: GhstlyClient,
@@ -277,11 +281,12 @@ export async function syncGhstlyBackfill(
   const today = getTodayLA();
   const startDate = getDateDaysAgo(days);
 
-  return executeSyncForDateRange(client, persistence, syncBatchId, startDate, today);
+  return executeSyncForDateRange(client, persistence, syncBatchId, startDate, today, false);
 }
 
 /**
  * Core sync logic for a given date range. Idempotent via upserts.
+ * When useWatermark=true, only fetches sessions newer than our latest stored session.
  */
 async function executeSyncForDateRange(
   client: GhstlyClient,
@@ -289,6 +294,7 @@ async function executeSyncForDateRange(
   syncBatchId: string,
   dateFrom: string,
   dateTo: string,
+  useWatermark = false,
 ): Promise<GhstlySyncResult> {
   const syncLogs: SyncLogEntry[] = [];
   const filteredSummaries = new Map<string, GhstlyStatsResponse['summary']>();
@@ -350,12 +356,28 @@ async function executeSyncForDateRange(
   }
 
   // ---- Stage 3: Fetch and persist sessions ----
+  // When useWatermark=true, only fetch sessions created after our latest stored one.
+  // This avoids re-fetching hundreds of sessions we already have on every sync.
   const sessionsStart = Date.now();
   let sessionRows: SessionRow[] = [];
+  let sessionDateFrom = dateFrom;
 
   try {
+    if (useWatermark && persistence.getLatestSessionTimestamp) {
+      const watermark = await persistence.getLatestSessionTimestamp();
+      if (watermark) {
+        // Use the watermark date (YYYY-MM-DD) as the start_date filter.
+        // We still include that day to catch any sessions created on the same
+        // day after our last sync — upsert handles duplicates safely.
+        const watermarkDate = watermark.split('T')[0];
+        if (watermarkDate > dateFrom) {
+          sessionDateFrom = watermarkDate;
+        }
+      }
+    }
+
     const sessions = await fetchAllSessions(client, {
-      start_date: dateFrom,
+      start_date: sessionDateFrom,
       finish_date: dateTo,
     });
 
@@ -365,9 +387,9 @@ async function executeSyncForDateRange(
 
     await persistence.upsertSessions(sessionRows);
 
-    syncLogs.push(makeSyncLog(syncBatchId, 'sessions', 'success', sessionsStart, sessionRows.length, dateFrom));
+    syncLogs.push(makeSyncLog(syncBatchId, 'sessions', 'success', sessionsStart, sessionRows.length, sessionDateFrom));
   } catch (error) {
-    syncLogs.push(makeSyncLog(syncBatchId, 'sessions', 'error', sessionsStart, 0, dateFrom, error));
+    syncLogs.push(makeSyncLog(syncBatchId, 'sessions', 'error', sessionsStart, 0, sessionDateFrom, error));
     throw error;
   }
 

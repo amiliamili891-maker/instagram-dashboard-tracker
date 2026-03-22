@@ -91,6 +91,15 @@ function buildSyncDeps(env: ReturnType<typeof getServerEnv>, syncType: SyncType,
         const { error } = await serviceClient.from('sync_logs').insert(entry as Record<string, unknown>);
         if (error) console.error('Failed to insert ghstly sync_log:', error.message);
       },
+      async getLatestSessionTimestamp(): Promise<string | null> {
+        const { data } = await serviceClient
+          .from('sessions')
+          .select('created_at_utc')
+          .order('created_at_utc', { ascending: false })
+          .limit(1)
+          .single();
+        return data?.created_at_utc ?? null;
+      },
     };
     try {
       const result = syncType === 'backfill'
