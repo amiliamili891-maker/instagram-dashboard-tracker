@@ -74,8 +74,9 @@ export async function GET() {
     // Build persistence adapter using RPC
     const persistence: BudgetPersistence = {
       async fetchEntitiesWithSpend(): Promise<BudgetEntityInput[]> {
+        const numDays = 7;
         const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - numDays);
         const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
         const dateTo = new Date().toISOString().slice(0, 10);
 
@@ -95,7 +96,7 @@ export async function GET() {
           reveals: number;
           click_throughs: number;
         }>).map((row) => {
-          const spend = Number(row.spend);
+          const spend = Number(row.spend) / numDays; // Convert period sum to daily average
           const visits = Number(row.visits);
           const chats = Number(row.chats);
           const reveals = Number(row.reveals);
