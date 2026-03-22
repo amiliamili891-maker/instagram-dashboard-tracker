@@ -122,6 +122,17 @@ export default async function SessionsPage({
   const totalCount = count ?? 0;
   const totalPages = Math.ceil(totalCount / limit);
 
+  // Look up ad name if filtering by ad_id
+  let adName: string | null = null;
+  if (adId) {
+    const { data: adEntity } = await supabase
+      .from('ads')
+      .select('name')
+      .eq('id', adId)
+      .maybeSingle();
+    adName = adEntity?.name ?? null;
+  }
+
   // Build pagination URL params
   function pageUrl(p: number): string {
     const params = new URLSearchParams();
@@ -152,6 +163,17 @@ export default async function SessionsPage({
         adsetId={adsetId ?? ''}
         adId={adId ?? ''}
       />
+
+      {adId && (
+        <div className="filter-indicator">
+          <span>
+            Filtered by ad: <strong>{adName || adId}</strong>
+          </span>
+          <Link href="/dashboard/sessions" className="clear-filter-link">
+            Clear filter
+          </Link>
+        </div>
+      )}
 
       {error && (
         <div className="error-banner">Failed to load sessions: {error.message}</div>

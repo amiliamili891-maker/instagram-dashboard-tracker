@@ -5,6 +5,10 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getDateRanges, isValidPeriod } from "@/lib/date-utils";
 import { fmt } from "@/lib/format-utils";
+import { SparklineCell } from "@/components/sparkline-cell";
+import { TierBadge } from "@/components/tier-badge";
+import { AdThumbnail } from "@/components/ad-thumbnail";
+import type { TierLabel, TierColor } from "@/lib/intelligence/tier-classifier";
 
 interface AdRow {
   ad_id: string;
@@ -18,6 +22,12 @@ interface AdRow {
   cost_per_chat: number | null;
   chat_rate: number | null;
   reveal_rate: number | null;
+  dailyCostPerChat: (number | null)[];
+}
+
+interface TierInfo {
+  tier: TierLabel;
+  color: TierColor;
 }
 
 export function AdsetDetail({ adsetId }: { adsetId: string }) {
@@ -28,18 +38,20 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
   const [campaignId, setCampaignId] = useState("");
   const [campaignName, setCampaignName] = useState("");
   const [rows, setRows] = useState<AdRow[]>([]);
+  const [tiers, setTiers] = useState<Map<string, TierInfo>>(new Map());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
     const { current: range } = getDateRanges(period);
 
-    // Parallel fetch: stats + entity metadata
+    // Parallel fetch: stats + entity metadata + ad tiers
     Promise.all([
       fetch(`/api/stats/combined?level=ad&date_from=${range.from}&date_to=${range.to}`).then((r) => r.json()),
       fetch(`/api/entity/ads-by-adset?adset_id=${adsetId}`).then((r) => r.ok ? r.json() : { ads: [], adset_name: adsetId, campaign_id: "", campaign_name: "" }),
+      fetch('/api/intelligence/tiers?level=ad').then((r) => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] })),
     ])
-      .then(([resp, adsJson]) => {
+      .then(([resp, adsJson, tiersJson]) => {
         const allAdStats: Record<string, unknown>[] = resp.data ?? [];
         const adsData: { id: string; name: string; campaign_id: string }[] = adsJson.ads ?? [];
 
@@ -47,14 +59,29 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
         setCampaignId(adsJson.campaign_id ?? "");
         setCampaignName(adsJson.campaign_name ?? "");
 
+        // Build tier map
+        const tierMap = new Map<string, TierInfo>();
+        for (const t of (tiersJson.data ?? []) as { entity_id: string; data: Record<string, unknown> }[]) {
+          const compositeTier = (t.data?.compositeTier as TierLabel) ?? null;
+          const compositeColor = (t.data?.compositeColor as TierColor) ?? null;
+          if (compositeTier && compositeColor) {
+            tierMap.set(t.entity_id, { tier: compositeTier, color: compositeColor });
+          }
+        }
+        setTiers(tierMap);
+
         const adIdsInAdset = new Set(adsData.map((a) => a.id));
         const adNames = new Map(adsData.map((a) => [a.id, a.name]));
 
-        // Aggregate by ad_id across dates
+        // Aggregate by ad_id across dates and collect daily data
         const adAgg = new Map<string, { spend: number; impressions: number; clicks: number; chats: number; visits: number; reveals: number }>();
+        const daily = new Map<string, Map<string, { spend: number; chats: number }>>();
+
         for (const row of allAdStats) {
           const entityId = row.entity_id as string;
           if (!adIdsInAdset.has(entityId)) continue;
+          const date = row.report_date as string;
+
           const existing = adAgg.get(entityId) ?? { spend: 0, impressions: 0, clicks: 0, chats: 0, visits: 0, reveals: 0 };
           existing.spend += Number(row.spend) || 0;
           existing.impressions += Number(row.impressions) || 0;
@@ -63,21 +90,42 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
           existing.visits += Number(row.visits) || 0;
           existing.reveals += Number(row.reveals) || 0;
           adAgg.set(entityId, existing);
+
+          // Daily data
+          if (!daily.has(entityId)) daily.set(entityId, new Map());
+          const dayMap = daily.get(entityId)!;
+          const dayData = dayMap.get(date) ?? { spend: 0, chats: 0 };
+          dayData.spend += Number(row.spend) || 0;
+          dayData.chats += Number(row.chats) || 0;
+          dayMap.set(date, dayData);
         }
 
-        const result: AdRow[] = Array.from(adAgg.entries()).map(([adId, a]) => ({
-          ad_id: adId,
-          ad_name: adNames.get(adId) ?? adId,
-          spend: a.spend,
-          impressions: a.impressions,
-          clicks: a.clicks,
-          chats: a.chats,
-          visits: a.visits,
-          reveals: a.reveals,
-          cost_per_chat: a.chats > 0 ? a.spend / a.chats : null,
-          chat_rate: a.visits > 0 ? a.chats / a.visits : null,
-          reveal_rate: a.chats > 0 ? a.reveals / a.chats : null,
-        }));
+        const result: AdRow[] = Array.from(adAgg.entries()).map(([adId, a]) => {
+          const dayMap = daily.get(adId);
+          let dailyCostPerChat: (number | null)[] = [];
+          if (dayMap) {
+            const sortedDates = Array.from(dayMap.keys()).sort();
+            dailyCostPerChat = sortedDates.map((d) => {
+              const dd = dayMap.get(d)!;
+              return dd.chats > 0 ? dd.spend / dd.chats : null;
+            });
+          }
+
+          return {
+            ad_id: adId,
+            ad_name: adNames.get(adId) ?? adId,
+            spend: a.spend,
+            impressions: a.impressions,
+            clicks: a.clicks,
+            chats: a.chats,
+            visits: a.visits,
+            reveals: a.reveals,
+            cost_per_chat: a.chats > 0 ? a.spend / a.chats : null,
+            chat_rate: a.visits > 0 ? a.chats / a.visits : null,
+            reveal_rate: a.chats > 0 ? a.reveals / a.chats : null,
+            dailyCostPerChat,
+          };
+        });
         result.sort((a, b) => b.spend - a.spend);
         setRows(result);
         setLoading(false);
@@ -115,7 +163,10 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
           <table className="data-table">
             <thead>
               <tr>
+                <th className="thumbnail-cell"></th>
                 <th>Ad</th>
+                <th>Tier</th>
+                <th>Cost/Chat Trend</th>
                 <th>Spend</th>
                 <th>Cost/Chat</th>
                 <th>Chat Rate</th>
@@ -128,27 +179,47 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.ad_id}>
-                  <td>
-                    <Link
-                      href={`/dashboard/ads/${row.ad_id}?period=${period}`}
-                      className="entity-link"
-                    >
-                      {row.ad_name}
-                    </Link>
-                  </td>
-                  <td>{fmt(row.spend, "currency")}</td>
-                  <td>{fmt(row.cost_per_chat, "currency")}</td>
-                  <td>{fmt(row.chat_rate, "percent")}</td>
-                  <td>{fmt(row.reveal_rate, "percent")}</td>
-                  <td>{fmt(row.chats, "number")}</td>
-                  <td>{fmt(row.visits, "number")}</td>
-                  <td>{fmt(row.reveals, "number")}</td>
-                  <td>{fmt(row.impressions, "number")}</td>
-                  <td>{fmt(row.clicks, "number")}</td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const tierInfo = tiers.get(row.ad_id);
+                return (
+                  <tr key={row.ad_id}>
+                    <td className="thumbnail-cell">
+                      <AdThumbnail adId={row.ad_id} size="sm" />
+                    </td>
+                    <td>
+                      <Link
+                        href={`/dashboard/ads/${row.ad_id}?period=${period}`}
+                        className="entity-link"
+                      >
+                        {row.ad_name}
+                      </Link>
+                    </td>
+                    <td>
+                      {tierInfo ? (
+                        <TierBadge tier={tierInfo.tier} color={tierInfo.color} />
+                      ) : (
+                        <span className="tier-badge tier-gray">--</span>
+                      )}
+                    </td>
+                    <td className="sparkline-cell">
+                      {row.dailyCostPerChat.length >= 2 ? (
+                        <SparklineCell data={row.dailyCostPerChat} />
+                      ) : (
+                        <span style={{ color: "var(--muted)", fontSize: "0.75rem" }}>--</span>
+                      )}
+                    </td>
+                    <td>{fmt(row.spend, "currency")}</td>
+                    <td>{fmt(row.cost_per_chat, "currency")}</td>
+                    <td>{fmt(row.chat_rate, "percent")}</td>
+                    <td>{fmt(row.reveal_rate, "percent")}</td>
+                    <td>{fmt(row.chats, "number")}</td>
+                    <td>{fmt(row.visits, "number")}</td>
+                    <td>{fmt(row.reveals, "number")}</td>
+                    <td>{fmt(row.impressions, "number")}</td>
+                    <td>{fmt(row.clicks, "number")}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

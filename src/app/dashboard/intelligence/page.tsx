@@ -14,6 +14,14 @@ export const dynamic = 'force-dynamic';
 
 import { createClient } from '@supabase/supabase-js';
 import { getServerEnv } from '@/lib/env';
+import {
+  generateBudgetRecommendations,
+  type BudgetResult,
+  type BudgetRecommendation,
+  type BudgetPersistence,
+  type BudgetEntityInput,
+} from '@/lib/intelligence/budget-advisor';
+import { type FreshnessState } from '@/lib/sync/freshness';
 
 // ---------------------------------------------------------------------------
 // Types for display
@@ -104,6 +112,67 @@ async function fetchAlerts(): Promise<{
 }
 
 // ---------------------------------------------------------------------------
+// Budget Data Fetching
+// ---------------------------------------------------------------------------
+
+async function fetchBudgetRecommendations(suppressed: boolean): Promise<BudgetResult | null> {
+  if (suppressed) return null;
+
+  const env = getServerEnv();
+  const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const persistence: BudgetPersistence = {
+    async fetchEntitiesWithSpend(): Promise<BudgetEntityInput[]> {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
+      const dateTo = new Date().toISOString().slice(0, 10);
+
+      const { data, error } = await supabase
+        .from('daily_combined_stats')
+        .select('entity_id, entity_level, spend, visits, chats, reveals, click_throughs, chat_rate, cost_per_chat, reveal_rate, freshness_state')
+        .gte('report_date', dateFrom)
+        .lte('report_date', dateTo)
+        .eq('entity_level', 'ad');
+
+      if (error || !data) return [];
+
+      const entityMap = new Map<string, BudgetEntityInput>();
+      for (const row of data) {
+        const key = `${row.entity_id}:${row.entity_level}`;
+        const existing = entityMap.get(key);
+        if (existing) {
+          existing.spend += row.spend ?? 0;
+          existing.visits += row.visits ?? 0;
+        } else {
+          entityMap.set(key, {
+            entityId: row.entity_id,
+            entityLevel: row.entity_level,
+            spend: row.spend ?? 0,
+            visits: row.visits ?? 0,
+            chat_rate: row.chat_rate,
+            cost_per_chat: row.cost_per_chat,
+            reveal_rate: row.reveal_rate,
+            freshnessState: row.freshness_state as FreshnessState | null,
+          });
+        }
+      }
+
+      return Array.from(entityMap.values());
+    },
+  };
+
+  try {
+    return await generateBudgetRecommendations(persistence);
+  } catch (err) {
+    console.error('Budget recommendations fetch error:', err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Helper Components
 // ---------------------------------------------------------------------------
 
@@ -159,6 +228,129 @@ function EmptyState({ title, message }: { title: string; message: string }) {
   );
 }
 
+function ActionBadge({ action }: { action: string }) {
+  const colors: Record<string, string> = {
+    pause: 'badge-action-pause',
+    reduce: 'badge-action-reduce',
+    scale: 'badge-action-scale',
+    increase: 'badge-action-scale',
+    maintain: 'badge-action-maintain',
+  };
+  return (
+    <span className={`action-badge ${colors[action] ?? 'badge-action-maintain'}`}>
+      {action}
+    </span>
+  );
+}
+
+function BudgetRecCard({ rec }: { rec: BudgetRecommendation }) {
+  const actionLabel =
+    rec.action === 'pause' ? 'Pause and reallocate' :
+    rec.action === 'reduce' ? 'Reduce spend' :
+    rec.action === 'scale' ? 'Increase budget' :
+    rec.action === 'increase' ? 'Increase budget' :
+    'Maintain';
+
+  return (
+    <div className={`budget-rec-card budget-rec-${rec.action}`}>
+      <div className="budget-rec-header">
+        <ActionBadge action={rec.action} />
+        <span className={`tier-badge tier-${rec.tier.compositeColor}`}>
+          {rec.tier.compositeTier}
+        </span>
+      </div>
+      <div className="budget-rec-entity">
+        <span className="budget-rec-id">{rec.entityId}</span>
+        <span className="budget-rec-level">{rec.entityLevel}</span>
+      </div>
+      <div className="budget-rec-spend">
+        <span className="budget-rec-current">
+          ${rec.currentSpend.toFixed(2)}/day
+        </span>
+        {rec.suggestedSpend !== null && (
+          <span className="budget-rec-arrow">
+            {' → '}
+            <strong>${rec.suggestedSpend.toFixed(2)}/day</strong>
+          </span>
+        )}
+      </div>
+      <p className="budget-rec-action">{actionLabel}</p>
+      <p className="budget-rec-rationale">{rec.rationale}</p>
+    </div>
+  );
+}
+
+function BudgetRecommendationsSection({ budget }: { budget: BudgetResult }) {
+  const { pauseCandidates, scaleCandidates, suggestedReallocation, totalCurrentSpend } = budget;
+
+  if (pauseCandidates.length === 0 && scaleCandidates.length === 0) {
+    return (
+      <div className="intelligence-section">
+        <h2>Budget Recommendations</h2>
+        <EmptyState
+          title="No budget actions needed"
+          message="All ads are performing within acceptable ranges relative to their spend."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="intelligence-section">
+      <h2>Budget Recommendations</h2>
+
+      {totalCurrentSpend > 0 && (
+        <div className="budget-summary">
+          <span className="budget-summary-item">
+            Total daily spend: <strong>${totalCurrentSpend.toFixed(2)}</strong>
+          </span>
+          {suggestedReallocation > 0 && (
+            <span className="budget-summary-item budget-summary-savings">
+              Potential savings: <strong>${suggestedReallocation.toFixed(2)}/day</strong>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Kill List — ads to pause/reduce */}
+      {pauseCandidates.length > 0 && (
+        <div className="budget-subsection">
+          <h3 className="budget-subsection-title budget-kill-title">
+            Kill List
+            <span className="budget-count">{pauseCandidates.length}</span>
+          </h3>
+          <p className="budget-subsection-desc">
+            Ads rated Poor/Critical with active spend. Pause or reduce to free up ${suggestedReallocation.toFixed(2)}/day.
+          </p>
+          <div className="budget-rec-grid">
+            {pauseCandidates.map((rec) => (
+              <BudgetRecCard key={rec.entityId} rec={rec} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Scale List — ads to increase */}
+      {scaleCandidates.length > 0 && (
+        <div className="budget-subsection">
+          <h3 className="budget-subsection-title budget-scale-title">
+            Scale List
+            <span className="budget-count">{scaleCandidates.length}</span>
+          </h3>
+          <p className="budget-subsection-desc">
+            Ads rated Perfect/Very Good with room to scale. Reallocate freed budget here.
+          </p>
+          <div className="budget-rec-grid">
+            {scaleCandidates.map((rec) => (
+              <BudgetRecCard key={rec.entityId} rec={rec} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -182,6 +374,9 @@ export default async function IntelligencePage() {
       </section>
     );
   }
+
+  // Fetch budget recommendations (suppressed when alerts are suppressed)
+  const budgetResult = await fetchBudgetRecommendations(suppressed);
 
   return (
     <section className="intelligence-page">
@@ -237,6 +432,9 @@ export default async function IntelligencePage() {
           </div>
         )}
       </div>
+
+      {/* Budget Recommendations */}
+      {budgetResult && <BudgetRecommendationsSection budget={budgetResult} />}
     </section>
   );
 }

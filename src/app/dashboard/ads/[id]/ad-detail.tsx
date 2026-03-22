@@ -197,11 +197,14 @@ export function AdDetail({ adId }: { adId: string }) {
 
       <div className="session-link-section">
         <h3 className="metric-section-title">Session Diagnostics</h3>
+        <p className="session-link-description">
+          Drill into individual user sessions attributed to this ad — see funnel progression, chat transcripts, and drop-off points.
+        </p>
         <Link
           href={`/dashboard/sessions?ad_id=${adId}&period=${period}`}
-          className="session-link-placeholder"
+          className="session-diagnostics-btn"
         >
-          View sessions for this ad (coming soon)
+          View {metrics.chats > 0 ? `${metrics.chats} session${metrics.chats !== 1 ? 's' : ''}` : 'sessions'} for this ad
         </Link>
       </div>
     </>
