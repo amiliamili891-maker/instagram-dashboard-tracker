@@ -125,7 +125,7 @@ describe('recommendBudget — scale', () => {
     expect(rec!.action).toBe('scale');
     expect(rec!.suggestedSpend).toBeGreaterThan(rec!.currentSpend);
     expect(rec!.rationale).toContain('Perfect');
-    expect(rec!.rationale).toContain('scale');
+    expect(rec!.rationale.toLowerCase()).toContain('scale');
   });
 
   it('recommends maintain for Perfect tier already at high spend', () => {

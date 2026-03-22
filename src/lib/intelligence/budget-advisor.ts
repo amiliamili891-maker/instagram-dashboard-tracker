@@ -64,6 +64,59 @@ export const DEFAULT_BUDGET_CONFIG: BudgetConfig = {
 };
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a detailed, human-readable rationale from per-metric breakdowns.
+ * Shows actual values, what thresholds they crossed, and specific advice.
+ */
+function buildRationale(
+  tier: TierResult,
+  entity: BudgetEntityInput,
+  action: BudgetAction,
+  suggestedSpend: number | null,
+): string {
+  const lines: string[] = [];
+
+  // Lead with the verdict
+  const savings = entity.spend - (suggestedSpend ?? 0);
+  if (action === 'pause') {
+    lines.push(`PAUSE — this ad is burning $${entity.spend.toFixed(2)}/day at Critical performance. Save $${savings.toFixed(2)}/day.`);
+  } else if (action === 'reduce') {
+    lines.push(`REDUCE — ${tier.compositeTier} performance. Cut to $${(suggestedSpend ?? 0).toFixed(2)}/day (saves $${savings.toFixed(2)}/day).`);
+  } else if (action === 'scale') {
+    lines.push(`SCALE — ${tier.compositeTier} performance with headroom. Increase to $${(suggestedSpend ?? 0).toFixed(2)}/day.`);
+  } else {
+    lines.push(`MAINTAIN — ${tier.compositeTier} performance. Keep at $${entity.spend.toFixed(2)}/day and monitor.`);
+  }
+
+  // Per-metric breakdown with actual values
+  for (const m of tier.metrics) {
+    const icon = TIER_PRIORITY[m.label] >= 4 ? '⚠' : TIER_PRIORITY[m.label] <= 1 ? '✓' : '•';
+    lines.push(`${icon} ${m.thresholdExplanation}`);
+  }
+
+  // Specific advice based on the driving problem
+  if (action === 'pause' || action === 'reduce') {
+    const driving = tier.metrics.find(m => m.metric === tier.drivingMetric);
+    if (driving) {
+      if (driving.metric === 'cost_per_chat' && driving.value !== null) {
+        lines.push(`→ Cost per chat ($${driving.value.toFixed(2)}) is the main problem. Check targeting — you may be reaching low-intent audiences.`);
+      } else if (driving.metric === 'chat_rate' && driving.value !== null) {
+        lines.push(`→ Chat rate (${(driving.value * 100).toFixed(1)}%) is too low. The landing page or creative may not match audience expectations.`);
+      } else if (driving.metric === 'reveal_rate' && driving.value !== null) {
+        lines.push(`→ Reveal rate (${(driving.value * 100).toFixed(1)}%) is dragging performance. The chat experience or persona may need work.`);
+      }
+    }
+  } else if (action === 'scale') {
+    lines.push(`→ All metrics are strong. This ad converts well — increasing budget should yield more chats at a similar cost.`);
+  }
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Core Logic
 // ---------------------------------------------------------------------------
 
@@ -88,7 +141,6 @@ export function recommendBudget(
   if (priority >= 5 && entity.spend >= config.minSpendForPause) {
     const action: BudgetAction = priority >= 6 ? 'pause' : 'reduce';
     const suggestedSpend = action === 'pause' ? 0 : entity.spend * 0.5;
-    const savings = entity.spend - suggestedSpend;
 
     return {
       entityId: entity.entityId,
@@ -96,10 +148,7 @@ export function recommendBudget(
       action,
       currentSpend: entity.spend,
       suggestedSpend,
-      rationale:
-        `${tier.compositeTier} performance (driven by ${tier.drivingMetric}). ` +
-        `Spending $${entity.spend.toFixed(2)}/day with poor returns. ` +
-        `${action === 'pause' ? 'Pause' : 'Reduce by 50%'} to save $${savings.toFixed(2)}/day.`,
+      rationale: buildRationale(tier, entity, action, suggestedSpend),
       tier,
       urgency: priority,
     };
@@ -107,15 +156,14 @@ export function recommendBudget(
 
   // Below Target with meaningful spend -> reduce
   if (priority === 4 && entity.spend >= config.minSpendForPause) {
+    const suggestedSpend = entity.spend * 0.7;
     return {
       entityId: entity.entityId,
       entityLevel: entity.entityLevel,
       action: 'reduce',
       currentSpend: entity.spend,
-      suggestedSpend: entity.spend * 0.7,
-      rationale:
-        `Below Target performance (driven by ${tier.drivingMetric}). ` +
-        `Consider reducing spend by 30% until metrics improve.`,
+      suggestedSpend,
+      rationale: buildRationale(tier, entity, 'reduce', suggestedSpend),
       tier,
       urgency: priority,
     };
@@ -133,10 +181,7 @@ export function recommendBudget(
         action: 'scale',
         currentSpend: entity.spend,
         suggestedSpend: suggestedIncrease,
-        rationale:
-          `${tier.compositeTier} performance with room to scale. ` +
-          `Currently spending $${entity.spend.toFixed(2)}/day — ` +
-          `recommend increasing to $${suggestedIncrease.toFixed(2)}/day.`,
+        rationale: buildRationale(tier, entity, 'scale', suggestedIncrease),
         tier,
         urgency: 0,
       };
@@ -148,8 +193,7 @@ export function recommendBudget(
       action: 'maintain',
       currentSpend: entity.spend,
       suggestedSpend: null,
-      rationale:
-        `${tier.compositeTier} performance at good spend level. Maintain current budget.`,
+      rationale: buildRationale(tier, entity, 'maintain', null),
       tier,
       urgency: 0,
     };
@@ -163,8 +207,7 @@ export function recommendBudget(
       action: 'maintain',
       currentSpend: entity.spend,
       suggestedSpend: null,
-      rationale:
-        `${tier.compositeTier} performance. Maintain current budget and monitor.`,
+      rationale: buildRationale(tier, entity, 'maintain', null),
       tier,
       urgency: priority,
     };
