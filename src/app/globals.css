@@ -1764,6 +1764,35 @@ a {
   background: rgba(26, 107, 100, 0.04);
 }
 
+/* Rationale block in budget table */
+.rationale-block {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  max-width: 420px;
+}
+.rationale-verdict {
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 0.25rem;
+}
+.rationale-warning {
+  color: #b45309;
+}
+.rationale-good {
+  color: #15803d;
+}
+.rationale-neutral {
+  color: var(--muted);
+}
+.rationale-advice {
+  color: var(--accent);
+  font-style: italic;
+  margin-top: 0.25rem;
+}
+.rationale-line {
+  color: var(--muted);
+}
+
 .budget-action-badge {
   display: inline-block;
   padding: 0.12rem 0.45rem;

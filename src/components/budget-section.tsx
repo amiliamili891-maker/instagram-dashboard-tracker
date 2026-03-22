@@ -46,6 +46,25 @@ function formatSpend(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
+function RationaleBlock({ rationale }: { rationale: string }) {
+  const lines = rationale.split("\n");
+  return (
+    <div className="rationale-block">
+      {lines.map((line, i) => (
+        <div key={i} className={
+          line.startsWith("→") ? "rationale-advice" :
+          line.startsWith("⚠") ? "rationale-warning" :
+          line.startsWith("✓") ? "rationale-good" :
+          line.startsWith("•") ? "rationale-neutral" :
+          i === 0 ? "rationale-verdict" : "rationale-line"
+        }>
+          {line}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function BudgetSection({
   freshnessState,
 }: {
@@ -159,6 +178,7 @@ export function BudgetSection({
                   <th>Tier</th>
                   <th>Action</th>
                   <th>Suggested</th>
+                  <th>Reason</th>
                 </tr>
               </thead>
               <tbody>
@@ -176,6 +196,9 @@ export function BudgetSection({
                       {rec.suggestedSpend !== null
                         ? formatSpend(rec.suggestedSpend)
                         : "—"}
+                    </td>
+                    <td>
+                      <RationaleBlock rationale={rec.rationale} />
                     </td>
                   </tr>
                 ))}
@@ -197,6 +220,7 @@ export function BudgetSection({
                   <th>Tier</th>
                   <th>Action</th>
                   <th>Suggested</th>
+                  <th>Reason</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,6 +238,9 @@ export function BudgetSection({
                       {rec.suggestedSpend !== null
                         ? formatSpend(rec.suggestedSpend)
                         : "—"}
+                    </td>
+                    <td>
+                      <RationaleBlock rationale={rec.rationale} />
                     </td>
                   </tr>
                 ))}
