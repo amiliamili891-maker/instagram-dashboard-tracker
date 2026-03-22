@@ -208,7 +208,7 @@ async function fetchBudgetRecommendations(suppressed: boolean): Promise<BudgetRe
 // Mismatch Data Fetching
 // ---------------------------------------------------------------------------
 
-async function fetchMismatchResults(suppressed: boolean): Promise<(MismatchResult & { entityNames: Map<string, string> }) | null> {
+async function fetchMismatchResults(suppressed: boolean): Promise<(MismatchResult & { entityNames: Record<string, string> }) | null> {
   if (suppressed) return null;
 
   const env = getServerEnv();
@@ -264,7 +264,7 @@ async function fetchMismatchResults(suppressed: boolean): Promise<(MismatchResul
 
     // Resolve ad names
     const entityIds = result.mismatches.map((m) => m.entityId);
-    const entityNames = new Map<string, string>();
+    const entityNames: Record<string, string> = {};
     if (entityIds.length > 0) {
       const { data: ads } = await supabase
         .from('ads')
@@ -272,7 +272,7 @@ async function fetchMismatchResults(suppressed: boolean): Promise<(MismatchResul
         .in('id', entityIds);
 
       for (const ad of ads ?? []) {
-        entityNames.set(ad.id, ad.name);
+        entityNames[ad.id] = ad.name;
       }
     }
 
@@ -436,7 +436,7 @@ function MismatchCard({ mismatch, entityName }: { mismatch: Mismatch; entityName
   );
 }
 
-function MismatchSection({ result }: { result: MismatchResult & { entityNames: Map<string, string> } }) {
+function MismatchSection({ result }: { result: MismatchResult & { entityNames: Record<string, string> } }) {
   return (
     <div className="intelligence-section mismatch-section">
       <div className="mismatch-section-header">
@@ -445,6 +445,9 @@ function MismatchSection({ result }: { result: MismatchResult & { entityNames: M
           <span className="budget-count">{result.mismatches.length}</span>
         )}
       </div>
+      <p className="mismatch-checked-note">
+        {result.entitiesChecked} ads checked, {result.entitiesFlagged} flagged
+      </p>
       {result.mismatches.length === 0 ? (
         <EmptyState
           title="No creative-funnel mismatches detected"
@@ -456,7 +459,7 @@ function MismatchSection({ result }: { result: MismatchResult & { entityNames: M
             <MismatchCard
               key={`${mismatch.entityId}-${mismatch.pattern}-${idx}`}
               mismatch={mismatch}
-              entityName={result.entityNames.get(mismatch.entityId) ?? null}
+              entityName={result.entityNames[mismatch.entityId] ?? null}
             />
           ))}
         </div>
@@ -622,7 +625,17 @@ export default async function IntelligencePage() {
       </div>
 
       {/* Creative-Funnel Mismatches */}
-      {mismatchResult && <MismatchSection result={mismatchResult} />}
+      {mismatchResult ? (
+        <MismatchSection result={mismatchResult} />
+      ) : (
+        <div className="intelligence-section mismatch-section">
+          <h2>Creative-Funnel Mismatches</h2>
+          <EmptyState
+            title="No creative-funnel mismatches detected"
+            message="Metrics are balanced across all ads."
+          />
+        </div>
+      )}
 
       {/* Budget Recommendations */}
       {budgetResult && <BudgetRecommendationsSection budget={budgetResult} />}
