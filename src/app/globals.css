@@ -2271,6 +2271,18 @@ a {
   background: rgba(26, 107, 100, 0.04);
 }
 
+.spend-primary {
+  display: block;
+  font-weight: 600;
+}
+
+.spend-daily {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
 /* Rationale block in budget table */
 .rationale-block {
   font-size: 0.75rem;

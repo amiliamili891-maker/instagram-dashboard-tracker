@@ -387,6 +387,7 @@ async function fetchBudgetData(
         scaleCandidates: [],
         totalCurrentSpend: 0,
         suggestedReallocation: 0,
+        numDays: 7,
       },
       meta: {
         suppressed: true,
@@ -396,9 +397,9 @@ async function fetchBudgetData(
   }
 
   try {
+    const numDays = 7;
     const persistence: BudgetPersistence = {
       async fetchEntitiesWithSpend(): Promise<BudgetEntityInput[]> {
-        const numDays = 7;
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - numDays);
         const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
@@ -420,7 +421,7 @@ async function fetchBudgetData(
           reveals: number;
           click_throughs: number;
         }>).map((row) => {
-          const spend = Number(row.spend) / numDays; // Convert period sum to daily average
+          const spend = Number(row.spend); // Period total — advisor normalizes internally
           const visits = Number(row.visits);
           const chats = Number(row.chats);
           const reveals = Number(row.reveals);
@@ -438,7 +439,7 @@ async function fetchBudgetData(
       },
     };
 
-    const result = await generateBudgetRecommendations(persistence);
+    const result = await generateBudgetRecommendations(persistence, undefined, numDays);
 
     // Resolve entity names
     const entityIds = result.recommendations.map((r) => r.entityId);

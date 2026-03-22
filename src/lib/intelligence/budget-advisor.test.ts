@@ -8,6 +8,7 @@
  *   - Maintain recommendations for okay performers
  *   - Suppressed entity handling
  *   - Full recommendation flow
+ *   - numDays normalization
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -55,6 +56,8 @@ describe('recommendBudget — pause/reduce', () => {
     expect(rec).not.toBeNull();
     expect(rec!.action).toBe('pause');
     expect(rec!.suggestedSpend).toBe(0);
+    expect(rec!.currentSpend).toBe(15.0);
+    expect(rec!.dailySpend).toBe(15.0); // numDays=1 default
     expect(rec!.rationale).toContain('Critical');
     expect(rec!.urgency).toBe(6);
   });
@@ -124,6 +127,7 @@ describe('recommendBudget — scale', () => {
     expect(rec).not.toBeNull();
     expect(rec!.action).toBe('scale');
     expect(rec!.suggestedSpend).toBeGreaterThan(rec!.currentSpend);
+    expect(rec!.dailySavings).toBe(0); // scale has no savings
     expect(rec!.rationale).toContain('Perfect');
     expect(rec!.rationale.toLowerCase()).toContain('scale');
   });
@@ -204,6 +208,62 @@ describe('recommendBudget — suppression', () => {
 });
 
 // ---------------------------------------------------------------------------
+// numDays normalization
+// ---------------------------------------------------------------------------
+
+describe('recommendBudget — numDays', () => {
+  it('scales thresholds by numDays for 7-day period', () => {
+    // Spend of $5 over 7 days = $0.71/day, below $1/day minSpendForPause
+    const entity = makeEntity({
+      chat_rate: 0.30,       // Critical
+      cost_per_chat: 0.70,   // Critical
+      reveal_rate: 0.15,     // Critical
+      spend: 5.0,            // 7-day total
+    });
+
+    const rec = recommendBudget(entity, 10.0, DEFAULT_BUDGET_CONFIG, 7);
+
+    // $5 < $7 (minSpendForPause $1 * 7 days), so no pause recommendation
+    expect(rec === null || rec.action !== 'pause').toBe(true);
+  });
+
+  it('recommends pause for 7-day spend above scaled threshold', () => {
+    const entity = makeEntity({
+      chat_rate: 0.30,       // Critical
+      cost_per_chat: 0.70,   // Critical
+      reveal_rate: 0.15,     // Critical
+      spend: 21.0,           // 7-day total = $3/day
+    });
+
+    const rec = recommendBudget(entity, 50.0, DEFAULT_BUDGET_CONFIG, 7);
+
+    expect(rec).not.toBeNull();
+    expect(rec!.action).toBe('pause');
+    expect(rec!.currentSpend).toBe(21.0); // Actual period spend
+    expect(rec!.dailySpend).toBe(3.0);    // Daily average
+    expect(rec!.dailySavings).toBe(3.0);  // Full daily savings on pause
+  });
+
+  it('computes correct dailySpend and dailySavings for reduce', () => {
+    const entity = makeEntity({
+      chat_rate: 0.45,       // Poor
+      cost_per_chat: 0.55,   // Poor
+      reveal_rate: 0.22,     // Below Target
+      spend: 70.0,           // 7-day total = $10/day
+    });
+
+    const rec = recommendBudget(entity, 50.0, DEFAULT_BUDGET_CONFIG, 7);
+
+    expect(rec).not.toBeNull();
+    expect(rec!.action).toBe('reduce');
+    expect(rec!.currentSpend).toBe(70.0);
+    expect(rec!.dailySpend).toBe(10.0);
+    expect(rec!.suggestedSpend).toBe(35.0);    // 50% of period
+    expect(rec!.dailySavings).toBe(5.0);       // (70-35)/7
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Full Flow
 // ---------------------------------------------------------------------------
 
@@ -247,6 +307,7 @@ describe('generateBudgetRecommendations', () => {
     expect(result.scaleCandidates.length).toBeGreaterThanOrEqual(1);
     expect(result.totalCurrentSpend).toBe(25.0);
     expect(result.suggestedReallocation).toBeGreaterThan(0);
+    expect(result.numDays).toBe(1); // default
 
     // Sorted by urgency descending
     for (let i = 1; i < result.recommendations.length; i++) {
@@ -254,6 +315,31 @@ describe('generateBudgetRecommendations', () => {
         result.recommendations[i].urgency,
       );
     }
+  });
+
+  it('passes numDays through to results', async () => {
+    const entities: BudgetEntityInput[] = [
+      makeEntity({
+        entityId: 'ad_bad',
+        chat_rate: 0.30,
+        cost_per_chat: 0.70,
+        reveal_rate: 0.15,
+        spend: 70.0, // 7-day total
+      }),
+    ];
+
+    const persistence: BudgetPersistence = {
+      fetchEntitiesWithSpend: vi.fn().mockResolvedValue(entities),
+    };
+
+    const result = await generateBudgetRecommendations(persistence, undefined, 7);
+
+    expect(result.numDays).toBe(7);
+    expect(result.pauseCandidates.length).toBe(1);
+    expect(result.pauseCandidates[0].currentSpend).toBe(70.0);
+    expect(result.pauseCandidates[0].dailySpend).toBe(10.0);
+    // suggestedReallocation is daily savings
+    expect(result.suggestedReallocation).toBe(10.0);
   });
 
   it('returns empty results when all entities are suppressed', async () => {

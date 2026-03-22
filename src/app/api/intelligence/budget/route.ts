@@ -102,7 +102,7 @@ export async function GET(request: Request) {
           reveals: number;
           click_throughs: number;
         }>).map((row) => {
-          const spend = Number(row.spend) / numDays; // Convert period sum to daily average
+          const spend = Number(row.spend); // Period total — advisor normalizes internally
           const visits = Number(row.visits);
           const chats = Number(row.chats);
           const reveals = Number(row.reveals);
@@ -121,7 +121,7 @@ export async function GET(request: Request) {
       },
     };
 
-    const result = await generateBudgetRecommendations(persistence);
+    const result = await generateBudgetRecommendations(persistence, undefined, numDays);
 
     // Resolve entity names from ads/adsets/campaigns tables
     const entityIds = result.recommendations.map((r) => r.entityId);

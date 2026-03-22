@@ -15,6 +15,7 @@ export interface BudgetApiData {
   scaleCandidates: RecWithName[];
   totalCurrentSpend: number;
   suggestedReallocation: number;
+  numDays: number;
 }
 
 export interface BudgetApiMeta {
@@ -152,7 +153,8 @@ export function BudgetSection({
     );
   }
 
-  const { pauseCandidates, scaleCandidates, suggestedReallocation } = data;
+  const { pauseCandidates, scaleCandidates, suggestedReallocation, numDays: dataDays } = data;
+  const spendLabel = `Spend (${dataDays}d)`;
 
   if (pauseCandidates.length === 0 && scaleCandidates.length === 0) {
     return (
@@ -198,7 +200,7 @@ export function BudgetSection({
                 <tr>
                   <th></th>
                   <th>Ad</th>
-                  <th>Spend/day</th>
+                  <th>{spendLabel}</th>
                   <th>Tier</th>
                   <th>Action</th>
                   <th>Suggested</th>
@@ -214,7 +216,12 @@ export function BudgetSection({
                     <td className="ad-name-cell" title={rec.entityId}>
                       {rec.entityName || rec.entityId.slice(0, 12) + "..."}
                     </td>
-                    <td>{formatSpend(rec.currentSpend)}</td>
+                    <td>
+                      <span className="spend-primary">{formatSpend(rec.currentSpend)}</span>
+                      {dataDays > 1 && (
+                        <span className="spend-daily">~{formatSpend(rec.dailySpend)}/day</span>
+                      )}
+                    </td>
                     <td>
                       <Badge
                         variant="tier"
@@ -250,7 +257,7 @@ export function BudgetSection({
                 <tr>
                   <th></th>
                   <th>Ad</th>
-                  <th>Spend/day</th>
+                  <th>{spendLabel}</th>
                   <th>Tier</th>
                   <th>Action</th>
                   <th>Suggested</th>
@@ -266,7 +273,12 @@ export function BudgetSection({
                     <td className="ad-name-cell" title={rec.entityId}>
                       {rec.entityName || rec.entityId.slice(0, 12) + "..."}
                     </td>
-                    <td>{formatSpend(rec.currentSpend)}</td>
+                    <td>
+                      <span className="spend-primary">{formatSpend(rec.currentSpend)}</span>
+                      {dataDays > 1 && (
+                        <span className="spend-daily">~{formatSpend(rec.dailySpend)}/day</span>
+                      )}
+                    </td>
                     <td>
                       <Badge
                         variant="tier"

@@ -4,6 +4,9 @@
  * Identifies poor/critical spenders (high spend + bad tier) and recommends pause.
  * Identifies strong scale candidates (good tier + low relative spend) and recommends increase.
  * All outputs are advisory only — no automatic Meta actions in v1.
+ *
+ * Spend values are PERIOD totals (e.g. 7-day sum). The advisor normalizes
+ * internally using numDays for threshold comparisons and daily projections.
  */
 
 import {
@@ -25,8 +28,14 @@ export interface BudgetRecommendation {
   entityId: string;
   entityLevel: 'campaign' | 'adset' | 'ad';
   action: BudgetAction;
+  /** Actual spend over the analysis period */
   currentSpend: number;
+  /** Suggested spend for the same period length, or null for maintain */
   suggestedSpend: number | null;
+  /** Daily average spend (currentSpend / numDays) */
+  dailySpend: number;
+  /** Projected daily savings if recommendation is followed */
+  dailySavings: number;
   rationale: string;
   tier: TierResult;
   /** Priority ordering: higher = more urgent */
@@ -38,10 +47,14 @@ export interface BudgetResult {
   pauseCandidates: BudgetRecommendation[];
   scaleCandidates: BudgetRecommendation[];
   totalCurrentSpend: number;
+  /** Total potential daily savings across all pause/reduce candidates */
   suggestedReallocation: number;
+  /** Number of days in the analysis window */
+  numDays: number;
 }
 
 export interface BudgetEntityInput extends EntityMetrics {
+  /** Total spend over the analysis period (NOT daily) */
   spend: number;
 }
 
@@ -76,19 +89,22 @@ function buildRationale(
   entity: BudgetEntityInput,
   action: BudgetAction,
   suggestedSpend: number | null,
+  numDays: number,
 ): string {
   const lines: string[] = [];
+  const dailySpend = entity.spend / numDays;
+  const dailySuggested = suggestedSpend !== null ? suggestedSpend / numDays : null;
+  const dailySavings = dailySpend - (dailySuggested ?? 0);
 
   // Lead with the verdict
-  const savings = entity.spend - (suggestedSpend ?? 0);
   if (action === 'pause') {
-    lines.push(`PAUSE — this ad is burning $${entity.spend.toFixed(2)}/day at Critical performance. Save $${savings.toFixed(2)}/day.`);
+    lines.push(`PAUSE — this ad is burning $${entity.spend.toFixed(2)} over ${numDays}d (~$${dailySpend.toFixed(2)}/day) at Critical performance. Save ~$${dailySavings.toFixed(2)}/day.`);
   } else if (action === 'reduce') {
-    lines.push(`REDUCE — ${tier.compositeTier} performance. Cut to $${(suggestedSpend ?? 0).toFixed(2)}/day (saves $${savings.toFixed(2)}/day).`);
+    lines.push(`REDUCE — ${tier.compositeTier} performance. Cut to ~$${(dailySuggested ?? 0).toFixed(2)}/day (saves ~$${dailySavings.toFixed(2)}/day).`);
   } else if (action === 'scale') {
-    lines.push(`SCALE — ${tier.compositeTier} performance with headroom. Increase to $${(suggestedSpend ?? 0).toFixed(2)}/day.`);
+    lines.push(`SCALE — ${tier.compositeTier} performance with headroom. Increase to ~$${(dailySuggested ?? 0).toFixed(2)}/day.`);
   } else {
-    lines.push(`MAINTAIN — ${tier.compositeTier} performance. Keep at $${entity.spend.toFixed(2)}/day and monitor.`);
+    lines.push(`MAINTAIN — ${tier.compositeTier} performance. Keep at ~$${dailySpend.toFixed(2)}/day and monitor.`);
   }
 
   // Per-metric breakdown with actual values
@@ -122,11 +138,13 @@ function buildRationale(
 
 /**
  * Generate a budget recommendation for a single entity.
+ * Spend is the PERIOD total — numDays is used to normalize for thresholds.
  */
 export function recommendBudget(
   entity: BudgetEntityInput,
   medianSpend: number,
   config: BudgetConfig = DEFAULT_BUDGET_CONFIG,
+  numDays: number = 1,
 ): BudgetRecommendation | null {
   const tier = classifyEntity(entity, config);
 
@@ -136,11 +154,17 @@ export function recommendBudget(
   }
 
   const priority = TIER_PRIORITY[tier.compositeTier];
+  const dailySpend = entity.spend / numDays;
+
+  // Use daily thresholds for comparisons
+  const periodMinPause = config.minSpendForPause * numDays;
+  const periodMinScale = config.minSpendForScale * numDays;
 
   // Poor or Critical with meaningful spend -> pause/reduce
-  if (priority >= 5 && entity.spend >= config.minSpendForPause) {
+  if (priority >= 5 && entity.spend >= periodMinPause) {
     const action: BudgetAction = priority >= 6 ? 'pause' : 'reduce';
     const suggestedSpend = action === 'pause' ? 0 : entity.spend * 0.5;
+    const dailySavings = (entity.spend - suggestedSpend) / numDays;
 
     return {
       entityId: entity.entityId,
@@ -148,29 +172,34 @@ export function recommendBudget(
       action,
       currentSpend: entity.spend,
       suggestedSpend,
-      rationale: buildRationale(tier, entity, action, suggestedSpend),
+      dailySpend,
+      dailySavings,
+      rationale: buildRationale(tier, entity, action, suggestedSpend, numDays),
       tier,
       urgency: priority,
     };
   }
 
   // Below Target with meaningful spend -> reduce
-  if (priority === 4 && entity.spend >= config.minSpendForPause) {
+  if (priority === 4 && entity.spend >= periodMinPause) {
     const suggestedSpend = entity.spend * 0.7;
+    const dailySavings = (entity.spend - suggestedSpend) / numDays;
     return {
       entityId: entity.entityId,
       entityLevel: entity.entityLevel,
       action: 'reduce',
       currentSpend: entity.spend,
       suggestedSpend,
-      rationale: buildRationale(tier, entity, 'reduce', suggestedSpend),
+      dailySpend,
+      dailySavings,
+      rationale: buildRationale(tier, entity, 'reduce', suggestedSpend, numDays),
       tier,
       urgency: priority,
     };
   }
 
   // Perfect/Really Good/Very Good/Great with low relative spend -> scale
-  if (priority <= 1 && entity.spend >= config.minSpendForScale) {
+  if (priority <= 1 && entity.spend >= periodMinScale) {
     // Scale candidates: good performance, spending below median
     const isUnderSpending = entity.spend < medianSpend * 1.5;
     if (isUnderSpending) {
@@ -181,7 +210,9 @@ export function recommendBudget(
         action: 'scale',
         currentSpend: entity.spend,
         suggestedSpend: suggestedIncrease,
-        rationale: buildRationale(tier, entity, 'scale', suggestedIncrease),
+        dailySpend,
+        dailySavings: 0,
+        rationale: buildRationale(tier, entity, 'scale', suggestedIncrease, numDays),
         tier,
         urgency: 0,
       };
@@ -193,7 +224,9 @@ export function recommendBudget(
       action: 'maintain',
       currentSpend: entity.spend,
       suggestedSpend: null,
-      rationale: buildRationale(tier, entity, 'maintain', null),
+      dailySpend,
+      dailySavings: 0,
+      rationale: buildRationale(tier, entity, 'maintain', null, numDays),
       tier,
       urgency: 0,
     };
@@ -207,7 +240,9 @@ export function recommendBudget(
       action: 'maintain',
       currentSpend: entity.spend,
       suggestedSpend: null,
-      rationale: buildRationale(tier, entity, 'maintain', null),
+      dailySpend,
+      dailySavings: 0,
+      rationale: buildRationale(tier, entity, 'maintain', null, numDays),
       tier,
       urgency: priority,
     };
@@ -222,10 +257,12 @@ export function recommendBudget(
 
 /**
  * Generate budget recommendations for all active entities.
+ * @param numDays — number of days in the analysis window (spend is period total)
  */
 export async function generateBudgetRecommendations(
   persistence: BudgetPersistence,
   config: BudgetConfig = DEFAULT_BUDGET_CONFIG,
+  numDays: number = 1,
 ): Promise<BudgetResult> {
   const entities = await persistence.fetchEntitiesWithSpend();
 
@@ -238,7 +275,7 @@ export async function generateBudgetRecommendations(
   const recommendations: BudgetRecommendation[] = [];
 
   for (const entity of entities) {
-    const rec = recommendBudget(entity, medianSpend, config);
+    const rec = recommendBudget(entity, medianSpend, config, numDays);
     if (rec) {
       recommendations.push(rec);
     }
@@ -255,8 +292,9 @@ export async function generateBudgetRecommendations(
   );
 
   const totalCurrentSpend = entities.reduce((sum, e) => sum + e.spend, 0);
+  // suggestedReallocation = total daily savings across pause/reduce candidates
   const suggestedReallocation = pauseCandidates.reduce(
-    (sum, r) => sum + (r.currentSpend - (r.suggestedSpend ?? 0)),
+    (sum, r) => sum + r.dailySavings,
     0,
   );
 
@@ -266,5 +304,6 @@ export async function generateBudgetRecommendations(
     scaleCandidates,
     totalCurrentSpend,
     suggestedReallocation,
+    numDays,
   };
 }
