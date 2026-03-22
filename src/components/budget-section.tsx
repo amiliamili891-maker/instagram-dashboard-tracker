@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { FreshnessState } from "@/lib/sync/freshness";
 import type { BudgetRecommendation } from "@/lib/intelligence/budget-advisor";
-import { AdThumbnail } from "@/components/ad-thumbnail";
+import { ImageLightbox } from "@/components/image-lightbox";
 
 type RecWithName = BudgetRecommendation & { entityName?: string | null };
 
@@ -189,7 +189,7 @@ export function BudgetSection({
                 {pauseCandidates.map((rec) => (
                   <tr key={rec.entityId}>
                     <td className="thumbnail-cell">
-                      <AdThumbnail adId={rec.entityId} size="md" />
+                      <ImageLightbox adId={rec.entityId} size="md" />
                     </td>
                     <td className="ad-name-cell" title={rec.entityId}>
                       {rec.entityName || rec.entityId.slice(0, 12) + "..."}
@@ -237,7 +237,7 @@ export function BudgetSection({
                 {scaleCandidates.map((rec) => (
                   <tr key={rec.entityId}>
                     <td className="thumbnail-cell">
-                      <AdThumbnail adId={rec.entityId} size="md" />
+                      <ImageLightbox adId={rec.entityId} size="md" />
                     </td>
                     <td className="ad-name-cell" title={rec.entityId}>
                       {rec.entityName || rec.entityId.slice(0, 12) + "..."}

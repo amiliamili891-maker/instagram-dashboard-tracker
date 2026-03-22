@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { AdThumbnail } from "@/components/ad-thumbnail";
+import { ImageLightbox } from "@/components/image-lightbox";
 import { fmt } from "@/lib/format-utils";
 
 interface AdRow {
@@ -123,7 +123,7 @@ export function ScorecardTable() {
             >
               <td>{idx + 1}</td>
               <td className="thumbnail-cell">
-                <AdThumbnail adId={row.entity_id} signedUrl={row.thumbnail_url} size="sm" />
+                <ImageLightbox adId={row.entity_id} thumbnailSignedUrl={row.thumbnail_url} size="sm" />
               </td>
               <td>
                 <Link

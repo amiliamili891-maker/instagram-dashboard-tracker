@@ -28,7 +28,7 @@ import {
   type MismatchEntityInput,
 } from '@/lib/intelligence/mismatch-detector';
 import { type FreshnessState } from '@/lib/sync/freshness';
-import { AdThumbnail } from '@/components/ad-thumbnail';
+import { ImageLightbox } from '@/components/image-lightbox';
 
 // ---------------------------------------------------------------------------
 // Types for display
@@ -356,7 +356,7 @@ function BudgetRecCard({ rec }: { rec: BudgetRecommendation & { entityName?: str
   return (
     <div className={`budget-rec-card budget-rec-${rec.action}`}>
       <div className="budget-rec-header">
-        <AdThumbnail adId={rec.entityId} size="md" />
+        <ImageLightbox adId={rec.entityId} size="md" />
         <ActionBadge action={rec.action} />
         <span className={`tier-badge tier-${rec.tier.compositeColor}`}>
           {rec.tier.compositeTier}
@@ -409,7 +409,7 @@ function MismatchCard({ mismatch, entityName }: { mismatch: Mismatch; entityName
   return (
     <div className={`mismatch-card mismatch-${mismatch.pattern}`}>
       <div className="mismatch-header">
-        <AdThumbnail adId={mismatch.entityId} size="md" />
+        <ImageLightbox adId={mismatch.entityId} size="md" />
         <MismatchPatternBadge pattern={mismatch.pattern} />
       </div>
       <div className="mismatch-entity">

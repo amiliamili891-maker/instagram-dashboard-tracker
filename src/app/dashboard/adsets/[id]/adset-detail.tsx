@@ -12,7 +12,7 @@ import { getDateRanges, isValidPeriod } from "@/lib/date-utils";
 import { fmt } from "@/lib/format-utils";
 import { SparklineCell } from "@/components/sparkline-cell";
 import { TierBadge } from "@/components/tier-badge";
-import { AdThumbnail } from "@/components/ad-thumbnail";
+import { ImageLightbox } from "@/components/image-lightbox";
 import type { TierLabel, TierColor } from "@/lib/intelligence/tier-classifier";
 
 interface AdRow {
@@ -189,7 +189,7 @@ export function AdsetDetail({ adsetId }: { adsetId: string }) {
                 return (
                   <tr key={row.ad_id}>
                     <td className="thumbnail-cell">
-                      <AdThumbnail adId={row.ad_id} size="sm" />
+                      <ImageLightbox adId={row.ad_id} size="sm" />
                     </td>
                     <td>
                       <Link
