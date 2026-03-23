@@ -30,6 +30,7 @@ interface AggregatedKpis {
   chats: number;
   visits: number;
   reveals: number;
+  ghstly_conversions: number;
 }
 
 async function fetchAggregated(
@@ -51,6 +52,7 @@ async function fetchAggregated(
       chats: 0,
       visits: 0,
       reveals: 0,
+      ghstly_conversions: 0,
     };
   }
 
@@ -65,6 +67,7 @@ async function fetchAggregated(
       chats: 0,
       visits: 0,
       reveals: 0,
+      ghstly_conversions: 0,
     };
   }
 
@@ -76,6 +79,7 @@ async function fetchAggregated(
     chats: Number(row.chats) || 0,
     visits: Number(row.visits) || 0,
     reveals: Number(row.reveals) || 0,
+    ghstly_conversions: Number(row.ghstly_conversions) || 0,
   };
 }
 
@@ -83,6 +87,8 @@ function safeDivide(num: number, denom: number): number | null {
   if (denom === 0) return null;
   return num / denom;
 }
+
+const CONVERSION_LTV = 50; // Fixed LTV assumption per conversion
 
 function computeKpis(agg: AggregatedKpis) {
   return {
@@ -92,6 +98,8 @@ function computeKpis(agg: AggregatedKpis) {
     reveal_rate: safeDivide(agg.reveals, agg.chats),
     cost_per_unique_click: safeDivide(agg.spend, agg.unique_clicks),
     ctr: safeDivide(agg.clicks, agg.impressions),
+    conversions: agg.ghstly_conversions,
+    estimated_roa: agg.spend > 0 ? (agg.ghstly_conversions * CONVERSION_LTV) / agg.spend : null,
   };
 }
 
@@ -183,6 +191,22 @@ export async function GET(request: NextRequest) {
       comparison: compKpis.ctr,
       delta_pct: computeDelta(currentKpis.ctr, compKpis.ctr),
       format: "percent",
+    },
+    {
+      metric: "conversions",
+      label: "Conversions",
+      current: currentKpis.conversions,
+      comparison: compKpis.conversions,
+      delta_pct: computeDelta(currentKpis.conversions, compKpis.conversions),
+      format: "number",
+    },
+    {
+      metric: "estimated_roa",
+      label: "Est. ROA",
+      current: currentKpis.estimated_roa,
+      comparison: compKpis.estimated_roa,
+      delta_pct: computeDelta(currentKpis.estimated_roa, compKpis.estimated_roa),
+      format: "multiplier",
     },
   ];
 

@@ -35,6 +35,8 @@ function formatValue(value: number | null, format: string): string {
   if (value === null) return "\u2013";
   if (format === "currency") return `$${value.toFixed(2)}`;
   if (format === "percent") return `${(value * 100).toFixed(1)}%`;
+  if (format === "number") return Math.round(value).toLocaleString();
+  if (format === "multiplier") return `${value.toFixed(2)}x`;
   return value.toFixed(2);
 }
 

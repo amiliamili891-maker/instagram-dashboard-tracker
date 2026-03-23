@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
   const { data: ad } = await supabase
     .from("ads")
-    .select("id, name, campaign_id, adset_id")
+    .select("id, name, campaign_id, adset_id, format_category, emotional_trigger, text_angle")
     .eq("id", adId)
     .single();
 
@@ -51,6 +51,9 @@ export async function GET(request: NextRequest) {
     campaign_name: campaignResult.data?.name ?? ad.campaign_id,
     adset_id: ad.adset_id,
     adset_name: adsetResult.data?.name ?? ad.adset_id,
+    format_category: ad.format_category ?? null,
+    emotional_trigger: ad.emotional_trigger ?? null,
+    text_angle: ad.text_angle ?? null,
   }), {
     headers: {
       'Content-Type': 'application/json',

@@ -27,7 +27,22 @@ import {
   type MismatchPersistence,
   type MismatchEntityInput,
 } from '@/lib/intelligence/mismatch-detector';
+import {
+  scoreAdHealth,
+  analyzeFormatDiversity,
+  type AdHealthScore,
+  type AdHealthInput,
+  type FormatDiversityResult,
+} from '@/lib/intelligence/creative-health';
+import {
+  evaluateKillRules,
+  KILL_RULE_THRESHOLDS,
+  type KillRuleResult,
+  type KillRuleInput,
+  type KillRuleViolation,
+} from '@/lib/intelligence/kill-rules';
 import { type FreshnessState } from '@/lib/sync/freshness';
+import { FORMAT_LABELS, type FormatCategory } from '@/lib/creative-attributes';
 import { ImageLightbox } from '@/components/image-lightbox';
 import { SectionCallout } from '@/components/section-callout';
 import { Badge } from '@/components/badge';
@@ -520,6 +535,365 @@ function BudgetRecommendationsSection({ budget }: { budget: BudgetResult }) {
 }
 
 // ---------------------------------------------------------------------------
+// Creative Health + Format Diversity
+// ---------------------------------------------------------------------------
+
+async function fetchCreativeHealth(suppressed: boolean): Promise<{
+  healthScores: AdHealthScore[];
+  diversity: FormatDiversityResult;
+} | null> {
+  if (suppressed) return null;
+
+  const supabase = createServiceClient();
+
+  // Get active ads with their attributes
+  const { data: ads, error: adsError } = await supabase
+    .from('ads')
+    .select('id, name, format_category, status, effective_status');
+
+  if (adsError || !ads) return null;
+
+  // Get daily stats for the last 14 days to compute health scores
+  const fourteenDaysAgo = new Date();
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+  const dateFrom = fourteenDaysAgo.toISOString().slice(0, 10);
+
+  const { data: stats, error: statsError } = await supabase
+    .from('daily_combined_stats')
+    .select('entity_id, report_date, spend, chats, visits, cost_per_chat, chat_rate')
+    .gte('report_date', dateFrom)
+    .eq('entity_level', 'ad')
+    .order('report_date', { ascending: true });
+
+  if (statsError || !stats) return null;
+
+  // Build name/format lookup
+  const adMap = new Map<string, { name: string; format_category: string | null }>();
+  for (const ad of ads) {
+    adMap.set(ad.id, { name: ad.name, format_category: ad.format_category });
+  }
+
+  // Group stats by entity_id
+  const entityStats = new Map<string, typeof stats>();
+  for (const row of stats) {
+    const existing = entityStats.get(row.entity_id) ?? [];
+    existing.push(row);
+    entityStats.set(row.entity_id, existing);
+  }
+
+  // Score each ad that has stats
+  const healthScores: AdHealthScore[] = [];
+  for (const [entityId, rows] of entityStats) {
+    if (rows.length === 0) continue;
+
+    const adInfo = adMap.get(entityId);
+    const totalSpend = rows.reduce((sum, r) => sum + (Number(r.spend) || 0), 0);
+
+    // Split into recent half and prior half for trend
+    const midpoint = Math.floor(rows.length / 2);
+    const priorRows = rows.slice(0, midpoint);
+    const recentRows = rows.slice(midpoint);
+
+    const avgMetric = (arr: typeof rows, field: 'cost_per_chat' | 'chat_rate') => {
+      const vals = arr.map(r => Number(r[field])).filter(v => !isNaN(v) && v > 0);
+      return vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+    };
+
+    const input: AdHealthInput = {
+      entityId,
+      entityName: adInfo?.name ?? null,
+      formatCategory: adInfo?.format_category ?? null,
+      firstDate: rows[0].report_date,
+      lastDate: rows[rows.length - 1].report_date,
+      totalSpend,
+      daysWithData: rows.length,
+      recentCostPerChat: avgMetric(recentRows, 'cost_per_chat'),
+      priorCostPerChat: avgMetric(priorRows, 'cost_per_chat'),
+      recentChatRate: avgMetric(recentRows, 'chat_rate'),
+    };
+
+    healthScores.push(scoreAdHealth(input));
+  }
+
+  // Sort: red first, then yellow, then green; within each group by spend desc
+  const healthOrder = { red: 0, yellow: 1, green: 2 };
+  healthScores.sort((a, b) => {
+    const orderDiff = healthOrder[a.health] - healthOrder[b.health];
+    if (orderDiff !== 0) return orderDiff;
+    return b.totalSpend - a.totalSpend;
+  });
+
+  // Format diversity (only ads with recent stats = "active")
+  const activeAdIds = new Set(entityStats.keys());
+  const activeAds = ads
+    .filter(ad => activeAdIds.has(ad.id))
+    .map(ad => ({ format_category: ad.format_category }));
+
+  const diversity = analyzeFormatDiversity(activeAds);
+
+  return { healthScores, diversity };
+}
+
+// ---------------------------------------------------------------------------
+// Kill Rules Data Fetching
+// ---------------------------------------------------------------------------
+
+async function fetchKillRuleViolations(suppressed: boolean): Promise<(KillRuleResult & { adNames: Record<string, string> }) | null> {
+  if (suppressed) return null;
+
+  const supabase = createServiceClient();
+
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
+  const dateTo = new Date().toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from('daily_combined_stats')
+    .select('entity_id, spend, impressions, clicks, chats')
+    .gte('report_date', dateFrom)
+    .lte('report_date', dateTo)
+    .eq('entity_level', 'ad');
+
+  if (error || !data) return null;
+
+  // Aggregate per entity
+  const entityMap = new Map<string, { spend: number; impressions: number; clicks: number; chats: number }>();
+  for (const row of data) {
+    const existing = entityMap.get(row.entity_id);
+    if (existing) {
+      existing.spend += row.spend ?? 0;
+      existing.impressions += row.impressions ?? 0;
+      existing.clicks += row.clicks ?? 0;
+      existing.chats += row.chats ?? 0;
+    } else {
+      entityMap.set(row.entity_id, {
+        spend: row.spend ?? 0,
+        impressions: row.impressions ?? 0,
+        clicks: row.clicks ?? 0,
+        chats: row.chats ?? 0,
+      });
+    }
+  }
+
+  // Resolve ad names
+  const entityIds = Array.from(entityMap.keys());
+  const adNames: Record<string, string> = {};
+  if (entityIds.length > 0) {
+    const { data: ads } = await supabase
+      .from('ads')
+      .select('id, name')
+      .in('id', entityIds);
+
+    for (const ad of ads ?? []) {
+      adNames[ad.id] = ad.name;
+    }
+  }
+
+  // Build KillRuleInput array
+  const inputs: KillRuleInput[] = Array.from(entityMap.entries()).map(([entityId, agg]) => ({
+    entityId,
+    entityName: adNames[entityId] ?? null,
+    spend: agg.spend,
+    impressions: agg.impressions,
+    clicks: agg.clicks,
+    chats: agg.chats,
+    ctr: agg.impressions > 0 ? (agg.clicks / agg.impressions) * 100 : null,
+    costPerChat: agg.chats > 0 ? agg.spend / agg.chats : null,
+    frequency: null,
+  }));
+
+  try {
+    const result = evaluateKillRules(inputs);
+    return { ...result, adNames };
+  } catch (err) {
+    console.error('Kill rules evaluation error:', err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Kill Rules Section Component
+// ---------------------------------------------------------------------------
+
+function KillRuleActionBadge({ action }: { action: 'kill' | 'warn' }) {
+  const styles = action === 'kill'
+    ? { bg: '#3d0a0a', border: '#dc2626', text: '#f87171', label: 'KILL' }
+    : { bg: '#3d2e05', border: '#ca8a04', text: '#facc15', label: 'WARN' };
+  return (
+    <span style={{ background: styles.bg, border: `1px solid ${styles.border}`, borderRadius: '4px', padding: '0.15rem 0.4rem', fontSize: '0.7rem', color: styles.text, fontWeight: 600, textTransform: 'uppercase' as const }}>
+      {styles.label}
+    </span>
+  );
+}
+
+function KillRuleCard({ violation }: { violation: KillRuleViolation }) {
+  const borderColor = violation.action === 'kill' ? '#dc2626' : '#ca8a04';
+  const messageColor = violation.action === 'kill' ? '#f87171' : '#facc15';
+
+  return (
+    <div style={{ background: 'var(--color-surface-2, #1a1a2e)', border: `1px solid ${borderColor}`, borderRadius: '6px', padding: '0.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <ImageLightbox adId={violation.entityId} size="sm" />
+          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-primary, #e0e0e0)', fontWeight: 500 }} title={violation.entityId}>
+            {violation.entityName ?? violation.entityId}
+          </span>
+        </div>
+        <KillRuleActionBadge action={violation.action} />
+      </div>
+      <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.75rem', color: 'var(--color-text-secondary, #a0a0b0)', marginBottom: '0.25rem' }}>
+        <span>Rule: <strong style={{ color: '#e0e0e0' }}>{violation.rule}</strong></span>
+        <span>{violation.metric}: <strong style={{ color: messageColor }}>{violation.metric === 'ctr' ? `${violation.value.toFixed(2)}%` : violation.metric === 'chats' ? String(violation.value) : `$${violation.value.toFixed(2)}`}</strong></span>
+        <span>Threshold: {violation.metric === 'ctr' ? `${violation.threshold}%` : violation.metric === 'chats' ? String(violation.threshold) : `$${violation.threshold.toFixed(2)}`}</span>
+        <span>Spend: ${violation.spend.toFixed(2)}</span>
+      </div>
+      <p style={{ margin: '0.4rem 0 0', fontSize: '0.75rem', color: messageColor }}>
+        {violation.message}
+      </p>
+    </div>
+  );
+}
+
+function KillRulesSection({ result }: { result: KillRuleResult & { adNames: Record<string, string> } }) {
+  return (
+    <div className="intelligence-section">
+      <h2>
+        Kill Rules
+        {result.adsKilled > 0 && <span style={{ marginLeft: '0.5rem', background: '#3d0a0a', border: '1px solid #dc2626', borderRadius: '4px', padding: '0.1rem 0.4rem', fontSize: '0.7rem', color: '#f87171' }}>{result.adsKilled} kill</span>}
+        {result.adsWarned > 0 && <span style={{ marginLeft: '0.5rem', background: '#3d2e05', border: '1px solid #ca8a04', borderRadius: '4px', padding: '0.1rem 0.4rem', fontSize: '0.7rem', color: '#facc15' }}>{result.adsWarned} warn</span>}
+      </h2>
+      <SectionCallout>
+        <p>Binary <strong>circuit breakers</strong> that flag ads for immediate action based on hard spend/performance thresholds. Unlike tier classification (which grades on a spectrum), kill rules are non-negotiable cutoffs.</p>
+        <ul>
+          <li><strong>KILL</strong> (red) — Stop this ad immediately. No second chances.</li>
+          <li><strong>WARN</strong> (yellow) — Monitor for 24h. Kill if it doesn't improve.</li>
+        </ul>
+        <p>Rules: CTR &lt; {KILL_RULE_THRESHOLDS.low_ctr.threshold}% after ${KILL_RULE_THRESHOLDS.low_ctr.minSpend} = kill | CPA &gt; ${KILL_RULE_THRESHOLDS.high_cpa.threshold} after ${KILL_RULE_THRESHOLDS.high_cpa.minSpend} = kill | CPA &gt; ${KILL_RULE_THRESHOLDS.extreme_cpa.threshold} after ${KILL_RULE_THRESHOLDS.extreme_cpa.minSpend} = kill | 0 chats after ${KILL_RULE_THRESHOLDS.no_chats.minSpend} = kill</p>
+      </SectionCallout>
+      <p style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary, #a0a0b0)', margin: '0.5rem 0' }}>
+        {result.adsChecked} ads checked, {result.adsKilled} to kill, {result.adsWarned} to monitor
+      </p>
+      {result.violations.length === 0 ? (
+        <EmptyState
+          title="No kill rule violations"
+          message="All ads are above minimum thresholds. No immediate action needed."
+        />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.75rem' }}>
+          {result.violations.map((v, idx) => (
+            <KillRuleCard key={`${v.entityId}-${v.rule}-${idx}`} violation={v} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HealthBadge({ health }: { health: 'green' | 'yellow' | 'red' }) {
+  const colors = {
+    green: { bg: '#0d3320', border: '#16a34a', text: '#4ade80', label: 'Healthy' },
+    yellow: { bg: '#3d2e05', border: '#ca8a04', text: '#facc15', label: 'Warning' },
+    red: { bg: '#3d0a0a', border: '#dc2626', text: '#f87171', label: 'Replace' },
+  };
+  const c = colors[health];
+  return (
+    <span style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: '4px', padding: '0.15rem 0.4rem', fontSize: '0.7rem', color: c.text, fontWeight: 600 }}>
+      {c.label}
+    </span>
+  );
+}
+
+function CreativeHealthSection({ healthScores, diversity }: { healthScores: AdHealthScore[]; diversity: FormatDiversityResult }) {
+  const redCount = healthScores.filter(s => s.health === 'red').length;
+  const yellowCount = healthScores.filter(s => s.health === 'yellow').length;
+  const greenCount = healthScores.filter(s => s.health === 'green').length;
+
+  return (
+    <>
+      {/* Format Diversity */}
+      <div className="intelligence-section">
+        <h2>Format Diversity</h2>
+        <SectionCallout>
+          <p>Tracks how many <strong>distinct visual formats</strong> are running simultaneously. Running 3+ formats protects against creative fatigue cliffs — when one format dies, others keep performing.</p>
+          <p>Formats: Ghost Pin, Find My, Notification, Chat, Dynamic Island, Widget, etc.</p>
+        </SectionCallout>
+        {diversity.alert && (
+          <div className={`suppression-banner ${diversity.distinctFormats <= 1 ? 'alert-critical' : 'alert-warning'}`} style={{ margin: '0.5rem 0', padding: '0.75rem', borderRadius: '6px', background: diversity.distinctFormats <= 1 ? '#3d0a0a' : '#3d2e05', border: `1px solid ${diversity.distinctFormats <= 1 ? '#dc2626' : '#ca8a04'}` }}>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: diversity.distinctFormats <= 1 ? '#f87171' : '#facc15' }}>
+              {diversity.alert}
+            </p>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', margin: '0.75rem 0' }}>
+          <div style={{ background: 'var(--color-surface-2, #1a1a2e)', padding: '0.75rem 1rem', borderRadius: '6px', border: '1px solid var(--color-border, #2a2a3e)', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: diversity.sufficient ? '#4ade80' : '#facc15' }}>{diversity.distinctFormats}</div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary, #a0a0b0)' }}>Active Formats</div>
+          </div>
+          {diversity.activeFormats.map(f => (
+            <div key={f.category} style={{ background: 'var(--color-surface-2, #1a1a2e)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--color-border, #2a2a3e)', fontSize: '0.8rem' }}>
+              <span style={{ color: '#2dd4bf' }}>{f.label}</span>
+              <span style={{ color: 'var(--color-text-secondary, #a0a0b0)', marginLeft: '0.5rem' }}>{f.count} ad{f.count !== 1 ? 's' : ''}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Ad Health Scores */}
+      <div className="intelligence-section">
+        <h2>
+          Ad Health
+          {redCount > 0 && <span style={{ marginLeft: '0.5rem', background: '#3d0a0a', border: '1px solid #dc2626', borderRadius: '4px', padding: '0.1rem 0.4rem', fontSize: '0.7rem', color: '#f87171' }}>{redCount} replace</span>}
+          {yellowCount > 0 && <span style={{ marginLeft: '0.5rem', background: '#3d2e05', border: '1px solid #ca8a04', borderRadius: '4px', padding: '0.1rem 0.4rem', fontSize: '0.7rem', color: '#facc15' }}>{yellowCount} warning</span>}
+        </h2>
+        <SectionCallout>
+          <p>Scores each active ad's health based on <strong>age</strong>, <strong>cost/chat trend</strong>, and <strong>performance</strong>.</p>
+          <ul>
+            <li><strong>Green</strong> — Healthy, performing within targets</li>
+            <li><strong>Yellow</strong> — Decaying or poor CPA. Start generating replacement.</li>
+            <li><strong>Red</strong> — Fatigued or critical CPA. Kill today, replace immediately.</li>
+          </ul>
+          <p>Ads running 14+ days with worsening CPA are flagged. Ads running 21+ days with declining chat rate trigger immediate replacement.</p>
+        </SectionCallout>
+        {healthScores.length === 0 ? (
+          <EmptyState title="No ad health data" message="No active ads with recent performance data." />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.75rem' }}>
+            {healthScores.map(score => (
+              <div key={score.entityId} style={{ background: 'var(--color-surface-2, #1a1a2e)', border: `1px solid ${score.health === 'red' ? '#dc2626' : score.health === 'yellow' ? '#ca8a04' : 'var(--color-border, #2a2a3e)'}`, borderRadius: '6px', padding: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <ImageLightbox adId={score.entityId} size="sm" />
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-primary, #e0e0e0)', fontWeight: 500 }} title={score.entityId}>
+                      {score.entityName ?? score.entityId}
+                    </span>
+                  </div>
+                  <HealthBadge health={score.health} />
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.75rem', color: 'var(--color-text-secondary, #a0a0b0)', marginBottom: '0.25rem' }}>
+                  <span>{score.daysRunning}d running</span>
+                  <span>${score.dailySpend.toFixed(2)}/day</span>
+                  {score.costPerChat !== null && <span>${score.costPerChat.toFixed(2)}/chat</span>}
+                  {score.chatRate !== null && <span>{(score.chatRate * 100).toFixed(0)}% chat</span>}
+                </div>
+                {score.formatCategory && (
+                  <span style={{ fontSize: '0.65rem', color: '#2dd4bf', background: 'var(--color-surface-1, #111)', borderRadius: '3px', padding: '0.1rem 0.3rem' }}>
+                    {FORMAT_LABELS[score.formatCategory] ?? score.formatCategory}
+                  </span>
+                )}
+                <p style={{ margin: '0.4rem 0 0', fontSize: '0.75rem', color: score.health === 'red' ? '#f87171' : score.health === 'yellow' ? '#facc15' : '#a0a0b0' }}>
+                  {score.reason}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -543,15 +917,30 @@ export default async function IntelligencePage() {
     );
   }
 
-  // Fetch budget recommendations and mismatch results (suppressed when alerts are suppressed)
-  const [budgetResult, mismatchResult] = await Promise.all([
+  // Fetch all intelligence data in parallel
+  const [budgetResult, mismatchResult, creativeHealth, killRuleResult] = await Promise.all([
     fetchBudgetRecommendations(suppressed),
     fetchMismatchResults(suppressed),
+    fetchCreativeHealth(suppressed),
+    fetchKillRuleViolations(suppressed),
   ]);
 
   return (
     <section className="intelligence-page">
       <h1>Intelligence Board</h1>
+
+      {/* Creative Health + Format Diversity — most actionable, shown first */}
+      {creativeHealth && (
+        <CreativeHealthSection
+          healthScores={creativeHealth.healthScores}
+          diversity={creativeHealth.diversity}
+        />
+      )}
+
+      {/* Kill Rules — binary circuit breakers */}
+      {killRuleResult && (
+        <KillRulesSection result={killRuleResult} />
+      )}
 
       {/* Threshold Tier Alerts */}
       <div className="intelligence-section">

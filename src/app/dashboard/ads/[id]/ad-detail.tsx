@@ -6,6 +6,14 @@ import Link from "next/link";
 import { getDateRanges, isValidPeriod } from "@/lib/date-utils";
 import { ImageLightbox } from "@/components/image-lightbox";
 import { fmt } from "@/lib/format-utils";
+import {
+  FORMAT_LABELS,
+  TRIGGER_LABELS,
+  ANGLE_LABELS,
+  type FormatCategory,
+  type EmotionalTrigger,
+  type TextAngle,
+} from "@/lib/creative-attributes";
 
 interface AdMetrics {
   ad_name: string;
@@ -35,6 +43,10 @@ interface AdMetrics {
   reveal_rate: number | null;
   cost_per_reveal: number | null;
   reveal_click_through_rate: number | null;
+  // Creative attributes
+  format_category: FormatCategory | null;
+  emotional_trigger: EmotionalTrigger | null;
+  text_angle: TextAngle | null;
 }
 
 function MetricRow({ label, value, format, source }: { label: string; value: number | null; format: "currency" | "percent" | "number"; source?: string }) {
@@ -110,6 +122,9 @@ export function AdDetail({ adId }: { adId: string }) {
           reveal_rate: safeDivide(agg.reveals, agg.chats),
           cost_per_reveal: safeDivide(agg.spend, agg.reveals),
           reveal_click_through_rate: safeDivide(agg.click_throughs, agg.reveals),
+          format_category: entityResp.format_category ?? null,
+          emotional_trigger: entityResp.emotional_trigger ?? null,
+          text_angle: entityResp.text_angle ?? null,
         });
         setLoading(false);
       })
@@ -149,6 +164,26 @@ export function AdDetail({ adId }: { adId: string }) {
         <ImageLightbox adId={adId} size="lg" />
         <h1 className="page-title">{metrics.ad_name}</h1>
       </div>
+
+      {(metrics.format_category || metrics.emotional_trigger || metrics.text_angle) && (
+        <div className="attribute-tags" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", margin: "0.75rem 0" }}>
+          {metrics.format_category && (
+            <span className="attribute-tag" style={{ background: "var(--color-surface-2, #1a1a2e)", border: "1px solid var(--color-border, #2a2a3e)", borderRadius: "4px", padding: "0.25rem 0.5rem", fontSize: "0.75rem", color: "var(--color-teal, #2dd4bf)" }}>
+              {FORMAT_LABELS[metrics.format_category] ?? metrics.format_category}
+            </span>
+          )}
+          {metrics.emotional_trigger && (
+            <span className="attribute-tag" style={{ background: "var(--color-surface-2, #1a1a2e)", border: "1px solid var(--color-border, #2a2a3e)", borderRadius: "4px", padding: "0.25rem 0.5rem", fontSize: "0.75rem", color: "var(--color-orange, #ff9500)" }}>
+              {TRIGGER_LABELS[metrics.emotional_trigger] ?? metrics.emotional_trigger}
+            </span>
+          )}
+          {metrics.text_angle && (
+            <span className="attribute-tag" style={{ background: "var(--color-surface-2, #1a1a2e)", border: "1px solid var(--color-border, #2a2a3e)", borderRadius: "4px", padding: "0.25rem 0.5rem", fontSize: "0.75rem", color: "var(--color-text-secondary, #a0a0b0)" }}>
+              {ANGLE_LABELS[metrics.text_angle] ?? metrics.text_angle}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="metric-sections">
         <div className="metric-section">

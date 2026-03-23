@@ -14,6 +14,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { type SyncLogEntry } from './types';
+import { inferAttributesFromName } from '@/lib/creative-attributes';
 
 import {
   type MetaAdRow,
@@ -442,6 +443,32 @@ async function upsertAds(
   });
 
   if (error) throw new Error(`Failed to upsert ads: ${error.message}`);
+
+  // Auto-tag new ads that have no creative attributes yet.
+  // Non-fatal: tagging failures are logged but don't break the sync.
+  try {
+    const { data: untagged } = await supabase
+      .from('ads')
+      .select('id, name')
+      .in('id', rows.map(r => r.id))
+      .is('format_category', null);
+
+    if (untagged && untagged.length > 0) {
+      for (const ad of untagged) {
+        const attrs = inferAttributesFromName(ad.name);
+        const updates: Record<string, string> = {};
+        if (attrs.format_category) updates.format_category = attrs.format_category;
+        if (attrs.emotional_trigger) updates.emotional_trigger = attrs.emotional_trigger;
+        if (attrs.text_angle) updates.text_angle = attrs.text_angle;
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('ads').update(updates).eq('id', ad.id);
+        }
+      }
+    }
+  } catch (tagError) {
+    console.error('[meta-sync] Auto-tagging failed (non-fatal):', tagError);
+  }
+
   return rows.length;
 }
 
