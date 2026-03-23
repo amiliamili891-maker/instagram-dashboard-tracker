@@ -8,6 +8,10 @@
  * - Mismatch warnings
  *
  * All surfaces are suppressed in degraded/stale mode.
+ *
+ * Performance: Uses shared data fetching — one query for daily_combined_stats
+ * and one query for ads, then passes pre-fetched data to all analyzers.
+ * This eliminates 5 redundant Supabase queries per page load.
  */
 
 export const dynamic = 'force-dynamic';
@@ -48,7 +52,7 @@ import { SectionCallout } from '@/components/section-callout';
 import { Badge } from '@/components/badge';
 
 // ---------------------------------------------------------------------------
-// Types for display
+// Types
 // ---------------------------------------------------------------------------
 
 interface AlertRow {
@@ -62,8 +66,36 @@ interface AlertRow {
   created_at: string;
 }
 
+/** Row type for the unified combined stats query */
+interface CombinedStatsRow {
+  entity_id: string;
+  entity_level: 'campaign' | 'ad' | 'adset';
+  report_date: string;
+  spend: number | null;
+  visits: number | null;
+  chats: number | null;
+  reveals: number | null;
+  click_throughs: number | null;
+  impressions: number | null;
+  clicks: number | null;
+  chat_rate: number | null;
+  cost_per_chat: number | null;
+  reveal_rate: number | null;
+  reveal_click_through_rate: number | null;
+  freshness_state: string | null;
+}
+
+/** Row type for the unified ads query */
+interface AdRow {
+  id: string;
+  name: string;
+  format_category: string | null;
+  status: string | null;
+  effective_status: string | null;
+}
+
 // ---------------------------------------------------------------------------
-// Data Fetching
+// Data Fetching — Alerts (independent, queries its own tables)
 // ---------------------------------------------------------------------------
 
 async function fetchAlerts(): Promise<{
@@ -114,6 +146,7 @@ async function fetchAlerts(): Promise<{
     .limit(200);
 
   if (error || !alerts) {
+    console.error('Intelligence alerts fetch error:', error);
     return {
       thresholdAlerts: [],
       anomalyAlerts: [],
@@ -133,32 +166,82 @@ async function fetchAlerts(): Promise<{
 }
 
 // ---------------------------------------------------------------------------
-// Budget Data Fetching
+// Shared Data Fetching — single query for daily_combined_stats and ads
+// Eliminates 3 redundant daily_combined_stats queries + 3 redundant ads queries
 // ---------------------------------------------------------------------------
 
-async function fetchBudgetRecommendations(suppressed: boolean): Promise<BudgetResult | null> {
-  if (suppressed) return null;
+/**
+ * Single query for daily_combined_stats — replaces 3 separate identical queries.
+ * Fetches ALL columns needed by budget, mismatch, creative health, and kill-rule analyzers.
+ * Uses 14-day window (creative health needs 14d; others filter to 7d in-memory).
+ */
+async function fetchCombinedStatsOnce(
+  supabase: ReturnType<typeof createServiceClient>,
+): Promise<CombinedStatsRow[]> {
+  const fourteenDaysAgo = new Date();
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+  const dateFrom = fourteenDaysAgo.toISOString().slice(0, 10);
+  const dateTo = new Date().toISOString().slice(0, 10);
 
-  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from('daily_combined_stats')
+    .select('entity_id, entity_level, report_date, spend, visits, chats, reveals, click_throughs, impressions, clicks, chat_rate, cost_per_chat, reveal_rate, reveal_click_through_rate, freshness_state')
+    .gte('report_date', dateFrom)
+    .lte('report_date', dateTo)
+    .eq('entity_level', 'ad')
+    .order('report_date', { ascending: true });
+
+  if (error) {
+    console.error('Combined stats fetch error:', error);
+    return [];
+  }
+
+  return (data ?? []) as CombinedStatsRow[];
+}
+
+/**
+ * Single query for ads table — replaces 4 separate queries.
+ * Fetches ALL columns needed by all analyzers.
+ * Only fetches ACTIVE and PAUSED ads to prevent unbounded growth (Fix 3).
+ */
+async function fetchAllAdsOnce(
+  supabase: ReturnType<typeof createServiceClient>,
+): Promise<AdRow[]> {
+  const { data, error } = await supabase
+    .from('ads')
+    .select('id, name, format_category, status, effective_status')
+    .in('effective_status', ['ACTIVE', 'PAUSED']);
+
+  if (error) {
+    console.error('Ads fetch error:', error);
+    return [];
+  }
+
+  return (data ?? []) as AdRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Analysis Functions — pure computation on pre-fetched data, no Supabase calls
+// ---------------------------------------------------------------------------
+
+/** Filter combined stats to the 7-day window used by budget, mismatch, and kill-rule analyzers. */
+function filterToSevenDays(stats: CombinedStatsRow[]): CombinedStatsRow[] {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
+  return stats.filter((row) => row.report_date >= dateFrom);
+}
+
+async function analyzeBudget(
+  combinedStats: CombinedStatsRow[],
+  allAds: AdRow[],
+): Promise<BudgetResult | null> {
+  const sevenDayStats = filterToSevenDays(combinedStats);
 
   const persistence: BudgetPersistence = {
     async fetchEntitiesWithSpend(): Promise<BudgetEntityInput[]> {
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
-      const dateTo = new Date().toISOString().slice(0, 10);
-
-      const { data, error } = await supabase
-        .from('daily_combined_stats')
-        .select('entity_id, entity_level, spend, visits, chats, reveals, click_throughs, chat_rate, cost_per_chat, reveal_rate, freshness_state')
-        .gte('report_date', dateFrom)
-        .lte('report_date', dateTo)
-        .eq('entity_level', 'ad');
-
-      if (error || !data) return [];
-
       const entityMap = new Map<string, BudgetEntityInput>();
-      for (const row of data) {
+      for (const row of sevenDayStats) {
         const key = `${row.entity_id}:${row.entity_level}`;
         const existing = entityMap.get(key);
         if (existing) {
@@ -177,7 +260,6 @@ async function fetchBudgetRecommendations(suppressed: boolean): Promise<BudgetRe
           });
         }
       }
-
       return Array.from(entityMap.values());
     },
   };
@@ -185,69 +267,41 @@ async function fetchBudgetRecommendations(suppressed: boolean): Promise<BudgetRe
   try {
     const result = await generateBudgetRecommendations(persistence);
 
-    // Resolve ad names
-    const entityIds = result.recommendations.map((r) => r.entityId);
-    if (entityIds.length > 0) {
-      const { data: ads } = await supabase
-        .from('ads')
-        .select('id, name')
-        .in('id', entityIds);
-
-      const nameMap = new Map<string, string>();
-      for (const ad of ads ?? []) {
-        nameMap.set(ad.id, ad.name);
-      }
-      for (const rec of result.recommendations) {
-        (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
-      }
-      for (const rec of result.pauseCandidates) {
-        (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
-      }
-      for (const rec of result.scaleCandidates) {
-        (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
-      }
+    // Resolve ad names from shared ads data
+    const nameMap = new Map<string, string>();
+    for (const ad of allAds) {
+      nameMap.set(ad.id, ad.name);
     }
-
+    for (const rec of result.recommendations) {
+      (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
+    }
+    for (const rec of result.pauseCandidates) {
+      (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
+    }
+    for (const rec of result.scaleCandidates) {
+      (rec as unknown as Record<string, unknown>).entityName = nameMap.get(rec.entityId) ?? null;
+    }
     return result;
   } catch (err) {
-    console.error('Budget recommendations fetch error:', err);
+    console.error('Budget recommendations analysis error:', err);
     return null;
   }
 }
 
-// ---------------------------------------------------------------------------
-// Mismatch Data Fetching
-// ---------------------------------------------------------------------------
-
-async function fetchMismatchResults(suppressed: boolean): Promise<(MismatchResult & { entityNames: Record<string, string> }) | null> {
-  if (suppressed) return null;
-
-  const supabase = createServiceClient();
+async function analyzeMismatches(
+  combinedStats: CombinedStatsRow[],
+  allAds: AdRow[],
+): Promise<(MismatchResult & { entityNames: Record<string, string> }) | null> {
+  const sevenDayStats = filterToSevenDays(combinedStats);
 
   const persistence: MismatchPersistence = {
     async fetchEntitiesForMismatch(): Promise<MismatchEntityInput[]> {
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
-      const dateTo = new Date().toISOString().slice(0, 10);
-
-      const { data, error } = await supabase
-        .from('daily_combined_stats')
-        .select('entity_id, entity_level, visits, chat_rate, reveal_rate, reveal_click_through_rate')
-        .gte('report_date', dateFrom)
-        .lte('report_date', dateTo)
-        .eq('entity_level', 'ad');
-
-      if (error || !data) return [];
-
-      // Aggregate by entity (sum visits, use latest rates)
       const entityMap = new Map<string, MismatchEntityInput>();
-      for (const row of data) {
+      for (const row of sevenDayStats) {
         const key = `${row.entity_id}:${row.entity_level}`;
         const existing = entityMap.get(key);
         if (existing) {
           existing.visits += row.visits ?? 0;
-          // Keep latest non-null rates (rows are ordered by date)
           if (row.chat_rate !== null) existing.chat_rate = row.chat_rate;
           if (row.reveal_rate !== null) existing.reveal_rate = row.reveal_rate;
           if (row.reveal_click_through_rate !== null) existing.reveal_click_through_rate = row.reveal_click_through_rate;
@@ -262,7 +316,6 @@ async function fetchMismatchResults(suppressed: boolean): Promise<(MismatchResul
           });
         }
       }
-
       return Array.from(entityMap.values());
     },
   };
@@ -270,23 +323,145 @@ async function fetchMismatchResults(suppressed: boolean): Promise<(MismatchResul
   try {
     const result = await detectMismatches(persistence);
 
-    // Resolve ad names
-    const entityIds = result.mismatches.map((m) => m.entityId);
-    const entityNames: Record<string, string> = {};
-    if (entityIds.length > 0) {
-      const { data: ads } = await supabase
-        .from('ads')
-        .select('id, name')
-        .in('id', entityIds);
-
-      for (const ad of ads ?? []) {
-        entityNames[ad.id] = ad.name;
-      }
+    // Resolve ad names from shared ads data
+    const nameMap = new Map<string, string>();
+    for (const ad of allAds) {
+      nameMap.set(ad.id, ad.name);
     }
-
+    const entityNames: Record<string, string> = {};
+    for (const m of result.mismatches) {
+      const name = nameMap.get(m.entityId);
+      if (name) entityNames[m.entityId] = name;
+    }
     return { ...result, entityNames };
   } catch (err) {
-    console.error('Mismatch detection fetch error:', err);
+    console.error('Mismatch detection analysis error:', err);
+    return null;
+  }
+}
+
+function analyzeCreativeHealth(
+  combinedStats: CombinedStatsRow[],
+  allAds: AdRow[],
+): { healthScores: AdHealthScore[]; diversity: FormatDiversityResult } | null {
+  if (allAds.length === 0) return null;
+
+  // Build name/format lookup
+  const adMap = new Map<string, { name: string; format_category: string | null }>();
+  for (const ad of allAds) {
+    adMap.set(ad.id, { name: ad.name, format_category: ad.format_category });
+  }
+
+  // Group stats by entity_id (uses full 14-day window)
+  const entityStats = new Map<string, CombinedStatsRow[]>();
+  for (const row of combinedStats) {
+    const existing = entityStats.get(row.entity_id) ?? [];
+    existing.push(row);
+    entityStats.set(row.entity_id, existing);
+  }
+
+  // Score each ad that has stats
+  const healthScores: AdHealthScore[] = [];
+  for (const [entityId, rows] of entityStats) {
+    if (rows.length === 0) continue;
+
+    const adInfo = adMap.get(entityId);
+    const totalSpend = rows.reduce((sum, r) => sum + (Number(r.spend) || 0), 0);
+
+    // Split into recent half and prior half for trend
+    const midpoint = Math.floor(rows.length / 2);
+    const priorRows = rows.slice(0, midpoint);
+    const recentRows = rows.slice(midpoint);
+
+    const avgMetric = (arr: typeof rows, field: 'cost_per_chat' | 'chat_rate') => {
+      const vals = arr.map(r => Number(r[field])).filter(v => !isNaN(v) && v > 0);
+      return vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+    };
+
+    const input: AdHealthInput = {
+      entityId,
+      entityName: adInfo?.name ?? null,
+      formatCategory: adInfo?.format_category ?? null,
+      firstDate: rows[0].report_date,
+      lastDate: rows[rows.length - 1].report_date,
+      totalSpend,
+      daysWithData: rows.length,
+      recentCostPerChat: avgMetric(recentRows, 'cost_per_chat'),
+      priorCostPerChat: avgMetric(priorRows, 'cost_per_chat'),
+      recentChatRate: avgMetric(recentRows, 'chat_rate'),
+    };
+
+    healthScores.push(scoreAdHealth(input));
+  }
+
+  // Sort: red first, then yellow, then green; within each group by spend desc
+  const healthOrder = { red: 0, yellow: 1, green: 2 };
+  healthScores.sort((a, b) => {
+    const orderDiff = healthOrder[a.health] - healthOrder[b.health];
+    if (orderDiff !== 0) return orderDiff;
+    return b.totalSpend - a.totalSpend;
+  });
+
+  // Format diversity (only ads with recent stats = "active")
+  const activeAdIds = new Set(entityStats.keys());
+  const activeAds = allAds
+    .filter(ad => activeAdIds.has(ad.id))
+    .map(ad => ({ format_category: ad.format_category }));
+
+  const diversity = analyzeFormatDiversity(activeAds);
+
+  return { healthScores, diversity };
+}
+
+function analyzeKillRules(
+  combinedStats: CombinedStatsRow[],
+  allAds: AdRow[],
+): (KillRuleResult & { adNames: Record<string, string> }) | null {
+  const sevenDayStats = filterToSevenDays(combinedStats);
+
+  // Aggregate per entity
+  const entityMap = new Map<string, { spend: number; impressions: number; clicks: number; chats: number }>();
+  for (const row of sevenDayStats) {
+    const existing = entityMap.get(row.entity_id);
+    if (existing) {
+      existing.spend += row.spend ?? 0;
+      existing.impressions += row.impressions ?? 0;
+      existing.clicks += row.clicks ?? 0;
+      existing.chats += row.chats ?? 0;
+    } else {
+      entityMap.set(row.entity_id, {
+        spend: row.spend ?? 0,
+        impressions: row.impressions ?? 0,
+        clicks: row.clicks ?? 0,
+        chats: row.chats ?? 0,
+      });
+    }
+  }
+
+  // Resolve ad names from shared ads data
+  const adNames: Record<string, string> = {};
+  for (const ad of allAds) {
+    adNames[ad.id] = ad.name;
+  }
+
+  // Build KillRuleInput array
+  const inputs: KillRuleInput[] = Array.from(entityMap.entries()).map(([entityId, agg]) => ({
+    entityId,
+    entityName: adNames[entityId] ?? null,
+    spend: agg.spend,
+    impressions: agg.impressions,
+    clicks: agg.clicks,
+    chats: agg.chats,
+    ctr: agg.impressions > 0 ? (agg.clicks / agg.impressions) * 100 : null,
+    costPerChat: agg.chats > 0 ? agg.spend / agg.chats : null,
+    frequency: null,
+  }));
+
+  try {
+    const result = evaluateKillRules(inputs);
+    return { ...result, adNames };
+  } catch (err) {
+    console.error('Kill rules evaluation error:', err);
     return null;
   }
 }
@@ -535,184 +710,6 @@ function BudgetRecommendationsSection({ budget }: { budget: BudgetResult }) {
 }
 
 // ---------------------------------------------------------------------------
-// Creative Health + Format Diversity
-// ---------------------------------------------------------------------------
-
-async function fetchCreativeHealth(suppressed: boolean): Promise<{
-  healthScores: AdHealthScore[];
-  diversity: FormatDiversityResult;
-} | null> {
-  if (suppressed) return null;
-
-  const supabase = createServiceClient();
-
-  // Get active ads with their attributes
-  const { data: ads, error: adsError } = await supabase
-    .from('ads')
-    .select('id, name, format_category, status, effective_status');
-
-  if (adsError || !ads) return null;
-
-  // Get daily stats for the last 14 days to compute health scores
-  const fourteenDaysAgo = new Date();
-  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-  const dateFrom = fourteenDaysAgo.toISOString().slice(0, 10);
-
-  const { data: stats, error: statsError } = await supabase
-    .from('daily_combined_stats')
-    .select('entity_id, report_date, spend, chats, visits, cost_per_chat, chat_rate')
-    .gte('report_date', dateFrom)
-    .eq('entity_level', 'ad')
-    .order('report_date', { ascending: true });
-
-  if (statsError || !stats) return null;
-
-  // Build name/format lookup
-  const adMap = new Map<string, { name: string; format_category: string | null }>();
-  for (const ad of ads) {
-    adMap.set(ad.id, { name: ad.name, format_category: ad.format_category });
-  }
-
-  // Group stats by entity_id
-  const entityStats = new Map<string, typeof stats>();
-  for (const row of stats) {
-    const existing = entityStats.get(row.entity_id) ?? [];
-    existing.push(row);
-    entityStats.set(row.entity_id, existing);
-  }
-
-  // Score each ad that has stats
-  const healthScores: AdHealthScore[] = [];
-  for (const [entityId, rows] of entityStats) {
-    if (rows.length === 0) continue;
-
-    const adInfo = adMap.get(entityId);
-    const totalSpend = rows.reduce((sum, r) => sum + (Number(r.spend) || 0), 0);
-
-    // Split into recent half and prior half for trend
-    const midpoint = Math.floor(rows.length / 2);
-    const priorRows = rows.slice(0, midpoint);
-    const recentRows = rows.slice(midpoint);
-
-    const avgMetric = (arr: typeof rows, field: 'cost_per_chat' | 'chat_rate') => {
-      const vals = arr.map(r => Number(r[field])).filter(v => !isNaN(v) && v > 0);
-      return vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
-    };
-
-    const input: AdHealthInput = {
-      entityId,
-      entityName: adInfo?.name ?? null,
-      formatCategory: adInfo?.format_category ?? null,
-      firstDate: rows[0].report_date,
-      lastDate: rows[rows.length - 1].report_date,
-      totalSpend,
-      daysWithData: rows.length,
-      recentCostPerChat: avgMetric(recentRows, 'cost_per_chat'),
-      priorCostPerChat: avgMetric(priorRows, 'cost_per_chat'),
-      recentChatRate: avgMetric(recentRows, 'chat_rate'),
-    };
-
-    healthScores.push(scoreAdHealth(input));
-  }
-
-  // Sort: red first, then yellow, then green; within each group by spend desc
-  const healthOrder = { red: 0, yellow: 1, green: 2 };
-  healthScores.sort((a, b) => {
-    const orderDiff = healthOrder[a.health] - healthOrder[b.health];
-    if (orderDiff !== 0) return orderDiff;
-    return b.totalSpend - a.totalSpend;
-  });
-
-  // Format diversity (only ads with recent stats = "active")
-  const activeAdIds = new Set(entityStats.keys());
-  const activeAds = ads
-    .filter(ad => activeAdIds.has(ad.id))
-    .map(ad => ({ format_category: ad.format_category }));
-
-  const diversity = analyzeFormatDiversity(activeAds);
-
-  return { healthScores, diversity };
-}
-
-// ---------------------------------------------------------------------------
-// Kill Rules Data Fetching
-// ---------------------------------------------------------------------------
-
-async function fetchKillRuleViolations(suppressed: boolean): Promise<(KillRuleResult & { adNames: Record<string, string> }) | null> {
-  if (suppressed) return null;
-
-  const supabase = createServiceClient();
-
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const dateFrom = sevenDaysAgo.toISOString().slice(0, 10);
-  const dateTo = new Date().toISOString().slice(0, 10);
-
-  const { data, error } = await supabase
-    .from('daily_combined_stats')
-    .select('entity_id, spend, impressions, clicks, chats')
-    .gte('report_date', dateFrom)
-    .lte('report_date', dateTo)
-    .eq('entity_level', 'ad');
-
-  if (error || !data) return null;
-
-  // Aggregate per entity
-  const entityMap = new Map<string, { spend: number; impressions: number; clicks: number; chats: number }>();
-  for (const row of data) {
-    const existing = entityMap.get(row.entity_id);
-    if (existing) {
-      existing.spend += row.spend ?? 0;
-      existing.impressions += row.impressions ?? 0;
-      existing.clicks += row.clicks ?? 0;
-      existing.chats += row.chats ?? 0;
-    } else {
-      entityMap.set(row.entity_id, {
-        spend: row.spend ?? 0,
-        impressions: row.impressions ?? 0,
-        clicks: row.clicks ?? 0,
-        chats: row.chats ?? 0,
-      });
-    }
-  }
-
-  // Resolve ad names
-  const entityIds = Array.from(entityMap.keys());
-  const adNames: Record<string, string> = {};
-  if (entityIds.length > 0) {
-    const { data: ads } = await supabase
-      .from('ads')
-      .select('id, name')
-      .in('id', entityIds);
-
-    for (const ad of ads ?? []) {
-      adNames[ad.id] = ad.name;
-    }
-  }
-
-  // Build KillRuleInput array
-  const inputs: KillRuleInput[] = Array.from(entityMap.entries()).map(([entityId, agg]) => ({
-    entityId,
-    entityName: adNames[entityId] ?? null,
-    spend: agg.spend,
-    impressions: agg.impressions,
-    clicks: agg.clicks,
-    chats: agg.chats,
-    ctr: agg.impressions > 0 ? (agg.clicks / agg.impressions) * 100 : null,
-    costPerChat: agg.chats > 0 ? agg.spend / agg.chats : null,
-    frequency: null,
-  }));
-
-  try {
-    const result = evaluateKillRules(inputs);
-    return { ...result, adNames };
-  } catch (err) {
-    console.error('Kill rules evaluation error:', err);
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Kill Rules Section Component
 // ---------------------------------------------------------------------------
 
@@ -917,12 +914,20 @@ export default async function IntelligencePage() {
     );
   }
 
-  // Fetch all intelligence data in parallel
+  // Shared data fetch — one query each for daily_combined_stats and ads
+  // (replaces 3 separate daily_combined_stats queries + 4 separate ads queries)
+  const supabase = createServiceClient();
+  const [combinedStats, allAds] = await Promise.all([
+    fetchCombinedStatsOnce(supabase),
+    fetchAllAdsOnce(supabase),
+  ]);
+
+  // Run all analysis in parallel using pre-fetched data (no more Supabase calls)
   const [budgetResult, mismatchResult, creativeHealth, killRuleResult] = await Promise.all([
-    fetchBudgetRecommendations(suppressed),
-    fetchMismatchResults(suppressed),
-    fetchCreativeHealth(suppressed),
-    fetchKillRuleViolations(suppressed),
+    analyzeBudget(combinedStats, allAds),
+    analyzeMismatches(combinedStats, allAds),
+    Promise.resolve(analyzeCreativeHealth(combinedStats, allAds)),
+    Promise.resolve(analyzeKillRules(combinedStats, allAds)),
   ]);
 
   return (

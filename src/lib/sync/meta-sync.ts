@@ -454,6 +454,8 @@ async function upsertAds(
       .is('format_category', null);
 
     if (untagged && untagged.length > 0) {
+      // Group ads by their inferred tag combination to batch UPDATEs
+      const tagGroups = new Map<string, string[]>();
       for (const ad of untagged) {
         const attrs = inferAttributesFromName(ad.name);
         const updates: Record<string, string> = {};
@@ -461,8 +463,15 @@ async function upsertAds(
         if (attrs.emotional_trigger) updates.emotional_trigger = attrs.emotional_trigger;
         if (attrs.text_angle) updates.text_angle = attrs.text_angle;
         if (Object.keys(updates).length > 0) {
-          await supabase.from('ads').update(updates).eq('id', ad.id);
+          const key = JSON.stringify(updates);
+          const group = tagGroups.get(key) ?? [];
+          group.push(ad.id);
+          tagGroups.set(key, group);
         }
+      }
+
+      for (const [tagsJson, ids] of tagGroups) {
+        await supabase.from('ads').update(JSON.parse(tagsJson)).in('id', ids);
       }
     }
   } catch (tagError) {

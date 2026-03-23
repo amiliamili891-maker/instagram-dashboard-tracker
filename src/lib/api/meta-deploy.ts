@@ -75,6 +75,19 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Redact Meta access tokens (EAA...) and truncate error bodies
+ * to prevent token leakage in error messages.
+ */
+function redactTokens(text: string): string {
+  return text.replace(/EAA[A-Za-z0-9]{20,}/g, '[REDACTED_TOKEN]');
+}
+
+function sanitizeErrorBody(body: string, maxLen = 200): string {
+  const truncated = body.length > maxLen ? body.slice(0, maxLen) + '...' : body;
+  return redactTokens(truncated);
+}
+
 function isRetryableStatus(status: number): boolean {
   return status === 429 || status >= 500;
 }
@@ -140,7 +153,7 @@ async function postWithRetry(
         continue;
       }
       throw new MetaDeployError(
-        `Meta API ${response.status}: ${body}`,
+        `Meta API ${response.status}: ${sanitizeErrorBody(body)}`,
         'request',
         response.status,
       );
@@ -200,7 +213,7 @@ export async function deployAdToMeta(input: DeployAdInput): Promise<DeployAdResu
   } catch (error) {
     if (error instanceof MetaDeployError) throw error;
     throw new MetaDeployError(
-      `Image upload failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Image upload failed: ${redactTokens(error instanceof Error ? error.message : String(error))}`,
       'image_upload',
     );
   }
@@ -240,7 +253,7 @@ export async function deployAdToMeta(input: DeployAdInput): Promise<DeployAdResu
   } catch (error) {
     if (error instanceof MetaDeployError) throw error;
     throw new MetaDeployError(
-      `Ad creative creation failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Ad creative creation failed: ${redactTokens(error instanceof Error ? error.message : String(error))}`,
       'ad_creative',
     );
   }
@@ -268,7 +281,7 @@ export async function deployAdToMeta(input: DeployAdInput): Promise<DeployAdResu
   } catch (error) {
     if (error instanceof MetaDeployError) throw error;
     throw new MetaDeployError(
-      `Ad creation failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Ad creation failed: ${redactTokens(error instanceof Error ? error.message : String(error))}`,
       'ad_create',
     );
   }
@@ -345,7 +358,7 @@ export async function listAdSets(
     if (!response.ok) {
       const body = await response.text();
       throw new MetaDeployError(
-        `Failed to list ad sets: ${response.status} ${body}`,
+        `Failed to list ad sets: ${response.status} ${sanitizeErrorBody(body)}`,
         'list_adsets',
         response.status,
       );

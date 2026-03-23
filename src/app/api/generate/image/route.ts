@@ -9,6 +9,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { requireAdminUser } from '@/lib/auth/guards';
 import { flattenNb2Prompt, isNb2Json } from '@/lib/nb2/flatten';
 import { NB2_ASPECT_RATIOS, NB2_RESOLUTIONS } from '@/lib/nb2/types';
+import { sanitizeNamePart } from '@/lib/deploy/naming';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 90; // LaoZhang can take up to 60s for 4K
@@ -44,7 +45,7 @@ async function callLaoZhang(
           },
         },
       }),
-      signal: AbortSignal.timeout(80_000),
+      signal: AbortSignal.timeout(35_000),
     });
 
     if (!resp.ok) {
@@ -148,6 +149,14 @@ export async function POST(request: Request) {
     );
   }
 
+  const safeName = sanitizeNamePart(concept_name);
+  if (!safeName) {
+    return Response.json(
+      { error: 'concept_name contains no valid characters after sanitization' },
+      { status: 400 },
+    );
+  }
+
   if (!prompt && !nb2_json) {
     return Response.json(
       { error: 'Either prompt or nb2_json is required' },
@@ -227,7 +236,7 @@ export async function POST(request: Request) {
     }
 
     return Response.json(
-      { error: `Image generation failed: ${error.message}` },
+      { error: 'Image generation failed. Please try again.' },
       { status: 502 },
     );
   }
@@ -251,7 +260,7 @@ export async function POST(request: Request) {
 
   // 6. Upload to Supabase Storage
   const supabase = createServiceClient();
-  const storagePath = `generated/${concept_name}.png`;
+  const storagePath = `generated/${safeName}.png`;
 
   const { error: uploadError } = await supabase.storage
     .from('ad-creatives')

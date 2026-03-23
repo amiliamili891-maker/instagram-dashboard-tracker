@@ -22,6 +22,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const campaignId = searchParams.get('campaign_id') ?? undefined;
 
+  if (campaignId && !/^\d+$/.test(campaignId)) {
+    return Response.json(
+      { error: 'campaign_id must be a numeric string' },
+      { status: 400 },
+    );
+  }
+
   // 3. Fetch ad sets from Meta
   try {
     const adsets = await listAdSets(campaignId);
@@ -35,10 +42,9 @@ export async function GET(request: Request) {
       },
     );
   } catch (err: unknown) {
-    const error = err as Error;
-    console.error('Failed to list ad sets:', error);
+    console.error('Failed to list ad sets:', err);
     return Response.json(
-      { error: `Failed to list ad sets: ${error.message}` },
+      { error: 'Failed to list ad sets. Please try again.' },
       { status: 502 },
     );
   }

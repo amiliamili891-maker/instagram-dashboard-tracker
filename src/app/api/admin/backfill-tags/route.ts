@@ -89,24 +89,29 @@ export async function POST(request: Request) {
   let skipped = 0;
   const results: Array<{ id: string; name: string; tags: OverrideEntry; source: 'override' | 'inferred' }> = [];
 
+  // Phase 1: Apply manual overrides (typically 1-2 ads, individual queries are fine)
   for (const ad of ads) {
-    // Check if this ad has a manual override
     const override = overrides[ad.id];
+    if (!override) continue;
 
-    if (override) {
-      // Apply manual override — always overwrite
-      const tags: Record<string, string | null> = {};
-      if (override.format_category) tags.format_category = override.format_category;
-      if (override.emotional_trigger) tags.emotional_trigger = override.emotional_trigger;
-      if (override.text_angle) tags.text_angle = override.text_angle;
+    const tags: Record<string, string | null> = {};
+    if (override.format_category) tags.format_category = override.format_category;
+    if (override.emotional_trigger) tags.emotional_trigger = override.emotional_trigger;
+    if (override.text_angle) tags.text_angle = override.text_angle;
 
-      if (Object.keys(tags).length > 0) {
-        await supabase.from('ads').update(tags).eq('id', ad.id);
-        updated++;
-        results.push({ id: ad.id, name: ad.name, tags: override, source: 'override' });
-      }
-      continue;
+    if (Object.keys(tags).length > 0) {
+      await supabase.from('ads').update(tags).eq('id', ad.id);
+      updated++;
+      results.push({ id: ad.id, name: ad.name, tags: override, source: 'override' });
     }
+  }
+
+  // Phase 2: Batch inferred tag updates — group ads by identical tag combination
+  const tagGroups = new Map<string, Array<{ id: string; name: string }>>();
+
+  for (const ad of ads) {
+    // Skip overridden ads (already handled above)
+    if (overrides[ad.id]) continue;
 
     // Skip ads that already have all three tags
     if (ad.format_category && ad.emotional_trigger && ad.text_angle) {
@@ -114,21 +119,31 @@ export async function POST(request: Request) {
       continue;
     }
 
-    // Infer from name
     const inferred = inferAttributesFromName(ad.name);
 
-    // Only update columns that are currently null AND have an inferred value
     const updates: Record<string, string> = {};
     if (!ad.format_category && inferred.format_category) updates.format_category = inferred.format_category;
     if (!ad.emotional_trigger && inferred.emotional_trigger) updates.emotional_trigger = inferred.emotional_trigger;
     if (!ad.text_angle && inferred.text_angle) updates.text_angle = inferred.text_angle;
 
     if (Object.keys(updates).length > 0) {
-      await supabase.from('ads').update(updates).eq('id', ad.id);
-      updated++;
-      results.push({ id: ad.id, name: ad.name, tags: updates, source: 'inferred' });
+      const key = JSON.stringify(updates);
+      const group = tagGroups.get(key) ?? [];
+      group.push({ id: ad.id, name: ad.name });
+      tagGroups.set(key, group);
     } else {
       skipped++;
+    }
+  }
+
+  // Issue one UPDATE per unique tag combination (typically ~10-15 instead of ~81)
+  for (const [tagsJson, groupAds] of tagGroups) {
+    const tags = JSON.parse(tagsJson) as Record<string, string>;
+    const ids = groupAds.map((a) => a.id);
+    await supabase.from('ads').update(tags).in('id', ids);
+    updated += groupAds.length;
+    for (const ad of groupAds) {
+      results.push({ id: ad.id, name: ad.name, tags, source: 'inferred' });
     }
   }
 
