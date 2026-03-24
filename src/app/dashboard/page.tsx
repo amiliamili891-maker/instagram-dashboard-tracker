@@ -37,6 +37,7 @@ interface AggregatedKpis {
   chats: number;
   visits: number;
   reveals: number;
+  click_throughs: number;
   ghstly_conversions: number;
 }
 
@@ -51,12 +52,12 @@ async function fetchAggregated(
 
   if (error) {
     console.error("Overview stats RPC error:", error.message);
-    return { spend: 0, clicks: 0, impressions: 0, unique_clicks: 0, chats: 0, visits: 0, reveals: 0, ghstly_conversions: 0 };
+    return { spend: 0, clicks: 0, impressions: 0, unique_clicks: 0, chats: 0, visits: 0, reveals: 0, click_throughs: 0, ghstly_conversions: 0 };
   }
 
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) {
-    return { spend: 0, clicks: 0, impressions: 0, unique_clicks: 0, chats: 0, visits: 0, reveals: 0, ghstly_conversions: 0 };
+    return { spend: 0, clicks: 0, impressions: 0, unique_clicks: 0, chats: 0, visits: 0, reveals: 0, click_throughs: 0, ghstly_conversions: 0 };
   }
 
   return {
@@ -67,6 +68,7 @@ async function fetchAggregated(
     chats: Number(row.chats) || 0,
     visits: Number(row.visits) || 0,
     reveals: Number(row.reveals) || 0,
+    click_throughs: Number(row.click_throughs) || 0,
     ghstly_conversions: Number(row.ghstly_conversions) || 0,
   };
 }
@@ -506,7 +508,8 @@ export default async function DashboardPage({
     { label: "Visits", value: funnelAgg.visits || null },
     { label: "Chats", value: funnelAgg.chats || null },
     { label: "Reveals", value: funnelAgg.reveals || null },
-    { label: "Clicks", value: funnelAgg.clicks || null },
+    { label: "Click-Throughs", value: funnelAgg.click_throughs || null },
+    { label: "Conversions", value: funnelAgg.ghstly_conversions || null },
   ];
 
   // Budget depends on freshness state
