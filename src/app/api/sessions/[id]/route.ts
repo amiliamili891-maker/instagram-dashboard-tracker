@@ -22,8 +22,8 @@ export async function GET(
 
   const { id } = await params;
 
-  if (!id) {
-    return Response.json({ error: 'Missing session ID' }, { status: 400 });
+  if (!id || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+    return Response.json({ error: 'Invalid session ID' }, { status: 400 });
   }
 
   try {

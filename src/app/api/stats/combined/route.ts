@@ -70,20 +70,42 @@ export async function GET(request: NextRequest) {
       .order('report_date', { ascending: false });
 
     // Apply optional entity filters
+    // daily_combined_stats only has entity_id (campaign_id at campaign level,
+    // adset_id at adset level, ad_id at ad level). For cross-level filtering
+    // (e.g. campaign_id filter at ad level), we look up child entity IDs first.
     if (campaignId) {
-      // For campaign level, filter by entity_id directly
       if (level === 'campaign') {
         query = query.eq('entity_id', campaignId);
+      } else if (level === 'adset') {
+        const { data: adsets } = await supabase
+          .from('adsets').select('id').eq('campaign_id', campaignId);
+        const adsetIds = adsets?.map((a) => a.id) ?? [];
+        if (adsetIds.length === 0) {
+          return Response.json({ data: [], meta: { level, date_from: dateFrom, date_to: dateTo, count: 0 } });
+        }
+        query = query.in('entity_id', adsetIds);
+      } else if (level === 'ad') {
+        const { data: ads } = await supabase
+          .from('ads').select('id').eq('campaign_id', campaignId);
+        const childAdIds = ads?.map((a) => a.id) ?? [];
+        if (childAdIds.length === 0) {
+          return Response.json({ data: [], meta: { level, date_from: dateFrom, date_to: dateTo, count: 0 } });
+        }
+        query = query.in('entity_id', childAdIds);
       }
-      // For lower levels, we need to join or filter differently
-      // Since combined stats stores entity_id (which is campaign_id at campaign level,
-      // adset_id at adset level, ad_id at ad level), we need a different approach.
-      // We'll rely on the caller passing the right entity filter for the right level.
     }
 
     if (adsetId) {
       if (level === 'adset') {
         query = query.eq('entity_id', adsetId);
+      } else if (level === 'ad') {
+        const { data: ads } = await supabase
+          .from('ads').select('id').eq('adset_id', adsetId);
+        const childAdIds = ads?.map((a) => a.id) ?? [];
+        if (childAdIds.length === 0) {
+          return Response.json({ data: [], meta: { level, date_from: dateFrom, date_to: dateTo, count: 0 } });
+        }
+        query = query.in('entity_id', childAdIds);
       }
     }
 

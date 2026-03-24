@@ -115,6 +115,8 @@ export interface GhstlySession {
   lead_name?: string | null;
   photos_sent?: number;
   voice_messages_sent?: number;
+  chat_type?: string;
+  chatter_name?: string | null;
   ip_address?: string;
   user_agent?: string;
 }
@@ -511,12 +513,23 @@ export const METRIC_DICTIONARY: MetricDefinition[] = [
   },
   {
     name: 'reveal_click_through_rate',
-    label: 'Reveal Click-Through Rate',
+    label: 'Click-Through Rate (Funnel)',
     source: 'derived',
-    formula: 'click_throughs / reveals',
+    formula: 'click_throughs / chats',
     grain: 'ad',
     nullBehavior: 'null',
     additive: false,
+    notes: 'Denominator is chats (matching Ghstly partner dashboard). Measures % of chatters who clicked through.',
+  },
+  {
+    name: 'conversion_rate',
+    label: 'Conversion Rate',
+    source: 'derived',
+    formula: 'ghstly_conversions / chats',
+    grain: 'ad',
+    nullBehavior: 'null',
+    additive: false,
+    notes: 'Denominator is chats (matching Ghstly partner dashboard). Measures % of chatters who converted.',
   },
 ];
 

@@ -87,6 +87,7 @@ export interface CombinedStatsRow {
   reveal_rate: number | null;
   cost_per_reveal: number | null;
   reveal_click_through_rate: number | null;
+  conversion_rate: number | null;
   cost_per_unique_click: number | null;
   // Join metadata
   join_status: 'joinable' | 'partial' | 'unknown';
@@ -134,12 +135,14 @@ export function computeDerivedMetrics(meta: {
   chats: number | null;
   reveals: number | null;
   click_throughs: number | null;
+  ghstly_conversions?: number | null;
 }): {
   chat_rate: number | null;
   cost_per_chat: number | null;
   reveal_rate: number | null;
   cost_per_reveal: number | null;
   reveal_click_through_rate: number | null;
+  conversion_rate: number | null;
   cost_per_unique_click: number | null;
   ctr: number | null;
   cpc: number | null;
@@ -150,13 +153,17 @@ export function computeDerivedMetrics(meta: {
     cost_per_chat: safeDivide(meta.spend, ghstly.chats),
     reveal_rate: safeDivide(ghstly.reveals, ghstly.chats),
     cost_per_reveal: safeDivide(meta.spend, ghstly.reveals),
-    reveal_click_through_rate: safeDivide(ghstly.click_throughs, ghstly.reveals),
+    // Denominator is chats (not reveals) — matches Ghstly partner dashboard definition:
+    // "of people who chatted, what % clicked through?"
+    reveal_click_through_rate: safeDivide(ghstly.click_throughs, ghstly.chats),
+    conversion_rate: safeDivide(ghstly.ghstly_conversions ?? null, ghstly.chats),
     cost_per_unique_click: safeDivide(meta.spend, meta.unique_clicks),
     ctr: safeDivide(meta.clicks, meta.impressions),
     cpc: safeDivide(meta.spend, meta.clicks),
-    cpm: safeDivide(meta.spend, meta.impressions) !== null
-      ? safeDivide(meta.spend, meta.impressions)! * 1000
-      : null,
+    cpm: (() => {
+      const ratio = safeDivide(meta.spend, meta.impressions);
+      return ratio !== null ? ratio * 1000 : null;
+    })(),
   };
 }
 
@@ -183,6 +190,7 @@ export function buildJoinedRow(
       chats: ghstly.chats,
       reveals: ghstly.reveals,
       click_throughs: ghstly.click_throughs,
+      ghstly_conversions: ghstly.ghstly_conversions,
     },
   );
 
@@ -211,6 +219,7 @@ export function buildJoinedRow(
     reveal_rate: derived.reveal_rate,
     cost_per_reveal: derived.cost_per_reveal,
     reveal_click_through_rate: derived.reveal_click_through_rate,
+    conversion_rate: derived.conversion_rate,
     cost_per_unique_click: derived.cost_per_unique_click,
     join_status: 'joinable',
     freshness_state: null,
@@ -256,6 +265,7 @@ export function buildMetaOnlyRow(meta: MetaStatsRow): CombinedStatsRow {
     reveal_rate: null,
     cost_per_reveal: null,
     reveal_click_through_rate: null,
+    conversion_rate: null,
     cost_per_unique_click: derived.cost_per_unique_click,
     join_status: 'partial',
     freshness_state: null,
@@ -273,6 +283,7 @@ export function buildGhstlyOnlyRow(ghstly: GhstlyStatsRow): CombinedStatsRow {
       chats: ghstly.chats,
       reveals: ghstly.reveals,
       click_throughs: ghstly.click_throughs,
+      ghstly_conversions: ghstly.ghstly_conversions,
     },
   );
 
@@ -301,6 +312,7 @@ export function buildGhstlyOnlyRow(ghstly: GhstlyStatsRow): CombinedStatsRow {
     reveal_rate: derived.reveal_rate,
     cost_per_reveal: null,
     reveal_click_through_rate: derived.reveal_click_through_rate,
+    conversion_rate: derived.conversion_rate,
     cost_per_unique_click: null,
     join_status: 'partial',
     freshness_state: null,
@@ -326,8 +338,9 @@ function buildJoinKey(
 /**
  * Materialize combined stats for a given date range.
  *
- * Joins daily_meta_stats and daily_ghstly_stats on (entity_id, report_date, entity_level)
- * for joinable rows only. Only publishes when batches are aligned.
+ * Joins daily_meta_stats and daily_ghstly_stats on (entity_id, report_date, entity_level).
+ * ALL Ghstly rows participate (including unjoinable organic/untracked traffic).
+ * Unjoinable rows become Ghstly-only partial rows so their chats count in the funnel.
  */
 export async function materializeCombinedStats(
   persistence: CombinePersistence,
@@ -350,12 +363,18 @@ export async function materializeCombinedStats(
   // false negatives because Meta and Ghstly use different sync_batch_ids.
   const batchAligned = true;
 
-  // 4. Index Ghstly rows by join key (only joinable rows participate in joins)
-  const ghstlyIndex = new Map<string, GhstlyStatsRow>();
+  // 4. Index Ghstly rows by join key.
+  // Joinable rows are indexed for joining with Meta. ALL rows (including
+  // unjoinable organic/untracked traffic) are tracked so they appear in
+  // combined stats as Ghstly-only partial rows. Previously unjoinable rows
+  // were silently dropped, undercounting chats by 20-30%.
+  const joinableGhstlyIndex = new Map<string, GhstlyStatsRow>();
+  const allGhstlyByKey = new Map<string, GhstlyStatsRow>();
   for (const row of ghstlyRows) {
+    const key = buildJoinKey(row.entity_id, row.report_date, row.entity_level);
+    allGhstlyByKey.set(key, row);
     if (row.join_status === 'joinable') {
-      const key = buildJoinKey(row.entity_id, row.report_date, row.entity_level);
-      ghstlyIndex.set(key, row);
+      joinableGhstlyIndex.set(key, row);
     }
   }
 
@@ -370,9 +389,10 @@ export async function materializeCombinedStats(
   const combinedRows: CombinedStatsRow[] = [];
   const matchedGhstlyKeys = new Set<string>();
 
-  // Process Meta rows: find matching Ghstly rows
+  // Process Meta rows: find matching JOINABLE Ghstly rows only
+  // (unjoinable rows must not join with Meta — they have no valid UTM tracking)
   for (const [key, metaRow] of metaIndex) {
-    const ghstlyRow = ghstlyIndex.get(key);
+    const ghstlyRow = joinableGhstlyIndex.get(key);
     if (ghstlyRow) {
       combinedRows.push(buildJoinedRow(metaRow, ghstlyRow));
       matchedGhstlyKeys.add(key);
@@ -381,8 +401,9 @@ export async function materializeCombinedStats(
     }
   }
 
-  // Process unmatched Ghstly rows (joinable but no Meta match)
-  for (const [key, ghstlyRow] of ghstlyIndex) {
+  // Process ALL unmatched Ghstly rows (both joinable-unmatched and unjoinable)
+  // as Ghstly-only partial rows so their chats count in the funnel
+  for (const [key, ghstlyRow] of allGhstlyByKey) {
     if (!matchedGhstlyKeys.has(key)) {
       combinedRows.push(buildGhstlyOnlyRow(ghstlyRow));
     }

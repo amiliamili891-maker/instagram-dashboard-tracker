@@ -101,7 +101,7 @@ export function createCombinePersistence(
     async fetchMetaStats(dateRange: DateRange) {
       const { data } = await client
         .from('daily_meta_stats')
-        .select('*')
+        .select('report_date, entity_level, entity_id, campaign_id, adset_id, ad_id, spend, impressions, clicks, unique_clicks, cpc, cpm, ctr, meta_conversions, cost_per_action, sync_batch_id')
         .gte('report_date', dateRange.from)
         .lte('report_date', dateRange.to);
       return data ?? [];
@@ -110,7 +110,7 @@ export function createCombinePersistence(
     async fetchGhstlyStats(dateRange: DateRange) {
       const { data } = await client
         .from('daily_ghstly_stats')
-        .select('*')
+        .select('report_date, entity_level, entity_id, campaign_id, adset_id, ad_id, visits, chats, reveals, click_throughs, ghstly_conversions, join_status, join_issue, sync_batch_id')
         .gte('report_date', dateRange.from)
         .lte('report_date', dateRange.to);
       return data ?? [];

@@ -155,9 +155,9 @@ describe('computeDerivedMetrics', () => {
     expect(result.cost_per_reveal).toBe(50 / 20);
   });
 
-  it('computes reveal_click_through_rate = click_throughs / reveals', () => {
+  it('computes reveal_click_through_rate = click_throughs / chats', () => {
     const result = computeDerivedMetrics(meta, ghstly);
-    expect(result.reveal_click_through_rate).toBe(10 / 20);
+    expect(result.reveal_click_through_rate).toBe(10 / 50);
   });
 
   it('computes cost_per_unique_click = spend / unique_clicks', () => {
@@ -218,10 +218,10 @@ describe('computeDerivedMetrics — zero denominator', () => {
     expect(result.cost_per_reveal).toBeNull();
   });
 
-  it('returns null for reveal_click_through_rate when reveals is 0', () => {
+  it('returns null for reveal_click_through_rate when chats is 0', () => {
     const result = computeDerivedMetrics(
       { spend: 50, impressions: 5000, clicks: 100, unique_clicks: 80 },
-      { visits: 200, chats: 50, reveals: 0, click_throughs: 10 },
+      { visits: 200, chats: 0, reveals: 0, click_throughs: 10 },
     );
     expect(result.reveal_click_through_rate).toBeNull();
   });
@@ -371,7 +371,8 @@ describe('buildGhstlyOnlyRow', () => {
     // Ghstly-only derived metrics are computed
     expect(row.chat_rate).toBe(50 / 200);
     expect(row.reveal_rate).toBe(20 / 50);
-    expect(row.reveal_click_through_rate).toBe(10 / 20);
+    expect(row.reveal_click_through_rate).toBe(10 / 50); // click_throughs / chats
+    expect(row.conversion_rate).toBe(3 / 50); // conversions / chats
 
     // Cross-source metrics requiring spend are null
     expect(row.cost_per_chat).toBeNull();
@@ -471,7 +472,7 @@ describe('materializeCombinedStats', () => {
     expect(result.rowsUpserted).toBe(3);
   });
 
-  it('skips unjoinable Ghstly rows during join', async () => {
+  it('unjoinable Ghstly rows appear as Ghstly-only partials (not joined with Meta)', async () => {
     const metaRow = makeMetaRow();
     const ghstlyRow = makeGhstlyRow({ join_status: 'unjoinable' });
     const syncLogs = [
@@ -482,11 +483,12 @@ describe('materializeCombinedStats', () => {
 
     const result = await materializeCombinedStats(persistence, dateRange);
 
-    // Unjoinable Ghstly row does NOT join with Meta row
+    // Unjoinable Ghstly row does NOT join with Meta row (no spend attribution)
     expect(result.joinableRows).toBe(0);
     expect(result.metaOnlyRows).toBe(1);
-    // Unjoinable Ghstly rows are excluded from combined output
-    expect(result.ghstlyOnlyRows).toBe(0);
+    // Unjoinable Ghstly rows now appear as Ghstly-only partials so chats are counted
+    expect(result.ghstlyOnlyRows).toBe(1);
+    expect(result.rowsUpserted).toBe(2);
   });
 
   it('publishes even with different batch IDs (alignment skipped in v1)', async () => {

@@ -471,6 +471,8 @@ describe('transformSession — row completeness', () => {
       'adset_id',
       'brand',
       'campaign_id',
+      'chat_type',
+      'chatter_name',
       'city',
       'clicked_through',
       'converted',

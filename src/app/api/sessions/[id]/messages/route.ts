@@ -24,6 +24,13 @@ export async function GET(
   }
 
   const { id } = await params;
+
+  // Validate session ID format to prevent path traversal against upstream Ghstly API
+  // Session IDs are UUIDs or alphanumeric strings — reject anything with slashes, dots, etc.
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+    return Response.json({ error: 'Invalid session ID format' }, { status: 400 });
+  }
+
   const supabase = createServiceClient();
 
   // Check cache first

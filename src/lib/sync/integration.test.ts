@@ -158,32 +158,37 @@ describe('Integration: full pipeline data flow', () => {
       expect(result.totalRetries).toBe(0);
 
       // Verify sync_logs structure: 6 entries expected
-      // 1. combined/orchestrate/running
-      // 2. meta/fetch/running
-      // 3. meta/persist/success
-      // 4. ghstly/fetch/running
-      // 5. ghstly/persist/success
-      // 6. combined/orchestrate/success
+      // First: combined/orchestrate/running
+      // Middle (parallel, order not guaranteed): meta/fetch, meta/persist, ghstly/fetch, ghstly/persist
+      // Last: combined/orchestrate/success
       expect(logs).toHaveLength(6);
 
       // All logs share the same sync_batch_id
       const batchId = result.syncBatchId;
       expect(logs.every((l) => l.sync_batch_id === batchId)).toBe(true);
 
-      // Verify log sequence
+      // First log is always the orchestrate lock
       expect(logs[0]).toMatchObject({ source: 'combined', stage: 'orchestrate', status: 'running' });
-      expect(logs[1]).toMatchObject({ source: 'meta', stage: 'fetch', status: 'running' });
-      expect(logs[2]).toMatchObject({ source: 'meta', stage: 'persist', status: 'success', records_synced: 42 });
-      expect(logs[3]).toMatchObject({ source: 'ghstly', stage: 'fetch', status: 'running' });
-      expect(logs[4]).toMatchObject({ source: 'ghstly', stage: 'persist', status: 'success', records_synced: 100 });
+      // Last log is always the orchestrate completion
       expect(logs[5]).toMatchObject({ source: 'combined', stage: 'orchestrate', status: 'success' });
+
+      // Middle 4 logs contain meta and ghstly fetch+persist (order not guaranteed due to parallel execution)
+      const middleLogs = logs.slice(1, 5);
+      expect(middleLogs).toEqual(expect.arrayContaining([
+        expect.objectContaining({ source: 'meta', stage: 'fetch', status: 'running' }),
+        expect.objectContaining({ source: 'meta', stage: 'persist', status: 'success', records_synced: 42 }),
+        expect.objectContaining({ source: 'ghstly', stage: 'fetch', status: 'running' }),
+        expect.objectContaining({ source: 'ghstly', stage: 'persist', status: 'success', records_synced: 100 }),
+      ]));
 
       // Verify triggered_by propagates through all logs
       expect(logs.every((l) => l.triggered_by === 'integration-test')).toBe(true);
 
-      // Verify watermark dates are recorded
-      expect(logs[2].watermark_date).toBe(REPORT_DATE);
-      expect(logs[4].watermark_date).toBe(REPORT_DATE);
+      // Verify watermark dates are recorded on persist-success logs
+      const metaPersist = middleLogs.find((l) => l.source === 'meta' && l.stage === 'persist');
+      const ghstlyPersist = middleLogs.find((l) => l.source === 'ghstly' && l.stage === 'persist');
+      expect(metaPersist?.watermark_date).toBe(REPORT_DATE);
+      expect(ghstlyPersist?.watermark_date).toBe(REPORT_DATE);
 
       // Verify final combined log has context with success flags
       expect(logs[5].context).toMatchObject({
@@ -320,7 +325,7 @@ describe('Integration: full pipeline data flow', () => {
       expect(row.cost_per_chat).toBe(100 / 100);            // spend / chats
       expect(row.reveal_rate).toBe(40 / 100);               // reveals / chats
       expect(row.cost_per_reveal).toBe(100 / 40);           // spend / reveals
-      expect(row.reveal_click_through_rate).toBe(20 / 40);  // click_throughs / reveals
+      expect(row.reveal_click_through_rate).toBe(20 / 100);  // click_throughs / chats
       expect(row.cost_per_unique_click).toBe(100 / 160);    // spend / unique_clicks
 
       // Join metadata
@@ -741,11 +746,11 @@ describe('Integration: full pipeline data flow', () => {
       expect(logs[0].error_message).toContain('existing-sync-123');
     });
 
-    it('proceeds when lock is stale (>10 min)', async () => {
+    it('proceeds when lock is stale (>15 min)', async () => {
       const now = new Date();
       const staleLock = {
         sync_batch_id: 'stale-sync-456',
-        started_at: new Date(now.getTime() - 15 * 60 * 1000).toISOString(), // 15 min ago
+        started_at: new Date(now.getTime() - 16 * 60 * 1000).toISOString(), // 16 min ago
       };
       const { persistence } = createMockOrchestratorPersistence(staleLock);
 

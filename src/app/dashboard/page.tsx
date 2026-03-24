@@ -171,9 +171,10 @@ async function fetchScorecardData(
   const adsetsMap = new Map<string, string>();
 
   if (adIds.length > 0) {
+    // Single query for ad metadata + creative paths (avoids duplicate DB round trip)
     const { data: adsData } = await supabase
       .from("ads")
-      .select("id, name, campaign_id, adset_id")
+      .select("id, name, campaign_id, adset_id, creative_storage_path")
       .in("id", adIds);
 
     for (const ad of adsData ?? []) {
@@ -199,14 +200,10 @@ async function fetchScorecardData(
       adsetsMap.set(a.id, a.name);
     }
 
-    // Fetch thumbnail signed URLs
-    const { data: adsWithCreatives } = await supabase
-      .from("ads")
-      .select("id, creative_storage_path")
-      .in("id", adIds)
-      .not("creative_storage_path", "is", null);
+    // Extract thumbnail paths from the already-fetched ads data (no second query needed)
+    const adsWithCreatives = (adsData ?? []).filter((a) => a.creative_storage_path);
 
-    const thumbnailPaths = (adsWithCreatives ?? []).filter((a) => a.creative_storage_path);
+    const thumbnailPaths = adsWithCreatives.filter((a) => a.creative_storage_path);
     let thumbnailMap = new Map<string, string>();
 
     if (thumbnailPaths.length > 0) {

@@ -5,7 +5,7 @@
 
 // --- Metric-keyed formatter (for trends/charts) ---
 
-const PERCENT_METRICS = ['chat_rate', 'reveal_rate', 'reveal_click_through_rate', 'ctr'];
+const PERCENT_METRICS = ['chat_rate', 'reveal_rate', 'reveal_click_through_rate', 'conversion_rate', 'ctr'];
 const CURRENCY_METRICS = [
   'spend', 'cpc', 'cpm', 'cost_per_chat', 'cost_per_reveal',
   'cost_per_unique_click', 'cost_per_action',

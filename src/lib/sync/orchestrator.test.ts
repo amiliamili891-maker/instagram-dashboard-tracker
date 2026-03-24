@@ -127,23 +127,23 @@ describe('isLockHeld', () => {
     ).toBe(true);
   });
 
-  it('returns false for stale lock (older than 10 minutes)', () => {
+  it('returns false for stale lock (older than 15 minutes)', () => {
     const now = new Date();
-    const elevenMinAgo = new Date(now.getTime() - 11 * 60 * 1000);
+    const sixteenMinAgo = new Date(now.getTime() - 16 * 60 * 1000);
     expect(
       isLockHeld(
-        { sync_batch_id: 'test-stale', started_at: elevenMinAgo.toISOString() },
+        { sync_batch_id: 'test-stale', started_at: sixteenMinAgo.toISOString() },
         now,
       ),
     ).toBe(false);
   });
 
-  it('returns true for lock exactly at 10 minute boundary', () => {
+  it('returns true for lock exactly at 15 minute boundary', () => {
     const now = new Date();
-    const tenMinAgo = new Date(now.getTime() - 10 * 60 * 1000);
+    const fifteenMinAgo = new Date(now.getTime() - 15 * 60 * 1000);
     expect(
       isLockHeld(
-        { sync_batch_id: 'test-boundary', started_at: tenMinAgo.toISOString() },
+        { sync_batch_id: 'test-boundary', started_at: fifteenMinAgo.toISOString() },
         now,
       ),
     ).toBe(true);
@@ -226,11 +226,11 @@ describe('runCombinedSync', () => {
     expect(ghstlySync).not.toHaveBeenCalled();
   });
 
-  it('proceeds when lock is stale (older than 10 min)', async () => {
+  it('proceeds when lock is stale (older than 15 min)', async () => {
     const now = new Date();
     const staleLock = {
       sync_batch_id: 'stale-sync',
-      started_at: new Date(now.getTime() - 15 * 60 * 1000).toISOString(),
+      started_at: new Date(now.getTime() - 16 * 60 * 1000).toISOString(),
     };
     const { persistence } = createMockPersistence(staleLock);
     const metaSync = createSuccessMetaSync();

@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     let query = serviceClient
       .from('intelligence_alerts')
-      .select('*')
+      .select('id, entity_id, entity_type, alert_type, severity, title, message, metadata, created_at, dismissed_at')
       .order('created_at', { ascending: false })
       .limit(limit);
 

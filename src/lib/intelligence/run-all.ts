@@ -138,7 +138,7 @@ function createTierPersistence(client: SupabaseClient): TierPersistence {
       const { data, error } = await client
         .from('daily_combined_stats')
         .select(
-          'entity_id, entity_level, visits, chat_rate, cost_per_chat, reveal_rate, freshness_state',
+          'entity_id, entity_level, visits, chats, reveals, spend, freshness_state',
         )
         .gte('report_date', dateFrom)
         .lte('report_date', dateTo)
@@ -146,27 +146,46 @@ function createTierPersistence(client: SupabaseClient): TierPersistence {
 
       if (error || !data) return [];
 
-      // Aggregate by entity (sum visits, use latest rates)
-      const entityMap = new Map<string, EntityMetrics>();
+      // Aggregate by entity — accumulate raw totals, then compute rates
+      const entityMap = new Map<string, {
+        entityId: string;
+        entityLevel: 'campaign' | 'adset' | 'ad';
+        visits: number;
+        chats: number;
+        reveals: number;
+        spend: number;
+        freshnessState: FreshnessState | null;
+      }>();
       for (const row of data) {
         const key = `${row.entity_id}:${row.entity_level}`;
         const existing = entityMap.get(key);
         if (existing) {
           existing.visits += row.visits ?? 0;
+          existing.chats += row.chats ?? 0;
+          existing.reveals += row.reveals ?? 0;
+          existing.spend += row.spend ?? 0;
         } else {
           entityMap.set(key, {
             entityId: row.entity_id,
             entityLevel: row.entity_level,
-            chat_rate: row.chat_rate,
-            cost_per_chat: row.cost_per_chat,
-            reveal_rate: row.reveal_rate,
             visits: row.visits ?? 0,
+            chats: row.chats ?? 0,
+            reveals: row.reveals ?? 0,
+            spend: row.spend ?? 0,
             freshnessState: row.freshness_state as FreshnessState | null,
           });
         }
       }
 
-      return Array.from(entityMap.values());
+      return Array.from(entityMap.values()).map((e) => ({
+        entityId: e.entityId,
+        entityLevel: e.entityLevel,
+        chat_rate: e.visits > 0 ? e.chats / e.visits : null,
+        cost_per_chat: e.chats > 0 ? e.spend / e.chats : null,
+        reveal_rate: e.chats > 0 ? e.reveals / e.chats : null,
+        visits: e.visits,
+        freshnessState: e.freshnessState,
+      }));
     },
 
     async upsertTierAlerts(results: TierResult[]): Promise<number> {
@@ -616,94 +635,90 @@ export async function runIntelligencePass(
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // 1. Anomaly detection
-  try {
-    const t0 = Date.now();
-    const persistence = createAnomalyPersistence(client);
-    const result = await detectAnomalies(persistence, { referenceDate: today });
-    anomalyCount = result.anomalies.length;
-    console.log(
-      `[intelligence] Anomaly detection: ${anomalyCount} anomalies across ${result.entitiesChecked} entities (${Date.now() - t0}ms)`,
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    errors.push(`anomaly-detector: ${msg}`);
-    console.error('[intelligence] Anomaly detection failed:', msg);
-  }
+  // Run all 6 modules in parallel — each has its own error handling
+  // and DB queries, so one failing does not block the others.
+  const results = await Promise.allSettled([
+    // 1. Anomaly detection
+    (async () => {
+      const t0 = Date.now();
+      const persistence = createAnomalyPersistence(client);
+      const result = await detectAnomalies(persistence, { referenceDate: today });
+      console.log(
+        `[intelligence] Anomaly detection: ${result.anomalies.length} anomalies across ${result.entitiesChecked} entities (${Date.now() - t0}ms)`,
+      );
+      return { module: 'anomaly', count: result.anomalies.length } as const;
+    })(),
+    // 2. Tier classification
+    (async () => {
+      const t0 = Date.now();
+      const persistence = createTierPersistence(client);
+      const result = await runTierClassification(persistence);
+      console.log(
+        `[intelligence] Tier classification: ${result.classified} classified, ${result.suppressed} suppressed (${Date.now() - t0}ms)`,
+      );
+      return { module: 'tier', count: result.classified } as const;
+    })(),
+    // 3. Mismatch detection
+    (async () => {
+      const t0 = Date.now();
+      const persistence = createMismatchPersistence(client);
+      const result = await detectMismatches(persistence);
+      console.log(
+        `[intelligence] Mismatch detection: ${result.mismatches.length} mismatches across ${result.entitiesChecked} entities (${Date.now() - t0}ms)`,
+      );
+      return { module: 'mismatch', count: result.mismatches.length } as const;
+    })(),
+    // 4. Budget recommendations
+    (async () => {
+      const t0 = Date.now();
+      const persistence = createBudgetPersistence(client);
+      // Budget persistence fetches 7 days of data — numDays must match
+      const result = await generateBudgetRecommendations(persistence, undefined, 7);
+      console.log(
+        `[intelligence] Budget advisor: ${result.recommendations.length} recommendations, $${result.suggestedReallocation.toFixed(2)} reallocation (${Date.now() - t0}ms)`,
+      );
+      return { module: 'budget', count: result.recommendations.length } as const;
+    })(),
+    // 5. Creative health scoring
+    (async () => {
+      const t0 = Date.now();
+      const inputs = await fetchHealthInputs(client);
+      const scores: AdHealthScore[] = inputs.map((input) => scoreAdHealth(input));
+      const count = await persistHealthAlerts(client, scores);
+      console.log(
+        `[intelligence] Creative health: ${count} scores persisted from ${inputs.length} ads (${Date.now() - t0}ms)`,
+      );
+      return { module: 'health', count } as const;
+    })(),
+    // 6. Kill rules evaluation
+    (async () => {
+      const t0 = Date.now();
+      const inputs = await fetchKillRuleInputs(client);
+      const result = evaluateKillRules(inputs);
+      const count = await persistKillRuleAlerts(client, result.violations);
+      console.log(
+        `[intelligence] Kill rules: ${result.adsKilled} killed, ${result.adsWarned} warned out of ${result.adsChecked} ads (${Date.now() - t0}ms)`,
+      );
+      return { module: 'kill', count } as const;
+    })(),
+  ]);
 
-  // 2. Tier classification
-  try {
-    const t0 = Date.now();
-    const persistence = createTierPersistence(client);
-    const result = await runTierClassification(persistence);
-    tierCount = result.classified;
-    console.log(
-      `[intelligence] Tier classification: ${tierCount} classified, ${result.suppressed} suppressed (${Date.now() - t0}ms)`,
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    errors.push(`tier-classifier: ${msg}`);
-    console.error('[intelligence] Tier classification failed:', msg);
-  }
-
-  // 3. Mismatch detection
-  try {
-    const t0 = Date.now();
-    const persistence = createMismatchPersistence(client);
-    const result = await detectMismatches(persistence);
-    mismatchCount = result.mismatches.length;
-    console.log(
-      `[intelligence] Mismatch detection: ${mismatchCount} mismatches across ${result.entitiesChecked} entities (${Date.now() - t0}ms)`,
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    errors.push(`mismatch-detector: ${msg}`);
-    console.error('[intelligence] Mismatch detection failed:', msg);
-  }
-
-  // 4. Budget recommendations
-  try {
-    const t0 = Date.now();
-    const persistence = createBudgetPersistence(client);
-    const result = await generateBudgetRecommendations(persistence);
-    budgetRecCount = result.recommendations.length;
-    console.log(
-      `[intelligence] Budget advisor: ${budgetRecCount} recommendations, $${result.suggestedReallocation.toFixed(2)} reallocation (${Date.now() - t0}ms)`,
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    errors.push(`budget-advisor: ${msg}`);
-    console.error('[intelligence] Budget advisor failed:', msg);
-  }
-
-  // 5. Creative health scoring
-  try {
-    const t0 = Date.now();
-    const inputs = await fetchHealthInputs(client);
-    const scores: AdHealthScore[] = inputs.map((input) => scoreAdHealth(input));
-    healthScoreCount = await persistHealthAlerts(client, scores);
-    console.log(
-      `[intelligence] Creative health: ${healthScoreCount} scores persisted from ${inputs.length} ads (${Date.now() - t0}ms)`,
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    errors.push(`creative-health: ${msg}`);
-    console.error('[intelligence] Creative health scoring failed:', msg);
-  }
-
-  // 6. Kill rules evaluation
-  try {
-    const t0 = Date.now();
-    const inputs = await fetchKillRuleInputs(client);
-    const result = evaluateKillRules(inputs);
-    killRuleCount = await persistKillRuleAlerts(client, result.violations);
-    console.log(
-      `[intelligence] Kill rules: ${result.adsKilled} killed, ${result.adsWarned} warned out of ${result.adsChecked} ads (${Date.now() - t0}ms)`,
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    errors.push(`kill-rules: ${msg}`);
-    console.error('[intelligence] Kill rules evaluation failed:', msg);
+  // Collect results from settled promises
+  for (const r of results) {
+    if (r.status === 'rejected') {
+      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      errors.push(msg);
+      console.error('[intelligence] Module failed:', msg);
+    } else {
+      switch (r.value.module) {
+        case 'anomaly': anomalyCount = r.value.count; break;
+        case 'tier': tierCount = r.value.count; break;
+        case 'mismatch': mismatchCount = r.value.count; break;
+        case 'budget': budgetRecCount = r.value.count; break;
+        case 'health': healthScoreCount = r.value.count; break;
+        case 'kill': killRuleCount = r.value.count; break;
+      }
+    }
   }
 
   const durationMs = Date.now() - start;

@@ -138,8 +138,10 @@ export function createMetaClient(config: MetaClientConfig) {
 
       if (!response.ok) {
         const body = await response.text();
+        // Redact access token from error messages to prevent token leakage in logs
+        const safeBody = body.replace(/access_token=[^&\s"]+/g, 'access_token=REDACTED');
         throw new MetaApiError(
-          `Meta API ${response.status}: ${body}`,
+          `Meta API ${response.status}: ${safeBody}`,
           response.status,
           isRetryableStatus(response.status),
         );
@@ -166,17 +168,37 @@ export function createMetaClient(config: MetaClientConfig) {
 
     while (result.paging?.next) {
       const nextUrl = result.paging.next;
-      // next URL already has access_token baked in
-      const response = await fetch(nextUrl);
-      if (!response.ok) {
-        const body = await response.text();
-        throw new MetaApiError(
-          `Meta API pagination ${response.status}: ${body}`,
-          response.status,
-          isRetryableStatus(response.status),
-        );
+      // next URL already has access_token baked in — use retry logic
+      // to handle rate limits and transient errors on subsequent pages
+      let pageResult: MetaPaginatedResponse<T> | null = null;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const response = await fetch(nextUrl);
+
+        if (response.status === 429 || (await isRateLimitError(response.clone()))) {
+          if (attempt < MAX_RETRIES) {
+            const wait = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
+            await sleep(wait);
+            continue;
+          }
+        }
+
+        if (!response.ok) {
+          const body = await response.text();
+          throw new MetaApiError(
+            `Meta API pagination ${response.status}: ${body}`,
+            response.status,
+            isRetryableStatus(response.status),
+          );
+        }
+        pageResult = (await response.json()) as MetaPaginatedResponse<T>;
+        break;
       }
-      result = (await response.json()) as MetaPaginatedResponse<T>;
+
+      if (!pageResult) {
+        throw new MetaApiError("Exhausted retries on pagination", 429, true);
+      }
+
+      result = pageResult;
       allData.push(...result.data);
     }
 
@@ -337,33 +359,45 @@ export function parseMetaFloat(
 }
 
 /**
+ * Get today's date in America/Los_Angeles timezone.
+ * Matches the timezone used by Ghstly sync to avoid cross-source date drift.
+ */
+function getTodayLA(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+}
+
+/**
  * Build the date range for a backfill of N days ending today (or a given end date).
+ * Uses LA timezone for consistency with Ghstly sync.
  */
 export function buildBackfillDateRange(
   days: number,
   endDate?: string,
 ): MetaDateRange {
-  const end = endDate ? new Date(endDate) : new Date();
+  const endStr = endDate ?? getTodayLA();
+  const end = new Date(endStr + 'T12:00:00Z');
   const start = new Date(end);
-  start.setDate(start.getDate() - days + 1);
+  start.setUTCDate(start.getUTCDate() - days + 1);
 
   return {
     since: formatDate(start),
-    until: formatDate(end),
+    until: endStr,
   };
 }
 
 /**
  * Build the date range for incremental sync: yesterday + today.
+ * Uses LA timezone for consistency with Ghstly sync.
  */
 export function buildIncrementalDateRange(today?: string): MetaDateRange {
-  const end = today ? new Date(today) : new Date();
+  const endStr = today ?? getTodayLA();
+  const end = new Date(endStr + 'T12:00:00Z');
   const start = new Date(end);
-  start.setDate(start.getDate() - 1);
+  start.setUTCDate(start.getUTCDate() - 1);
 
   return {
     since: formatDate(start),
-    until: formatDate(end),
+    until: endStr,
   };
 }
 
