@@ -134,9 +134,9 @@ The header shows the current data state:
 
 | Section | Check frequency | Action when alerts appear |
 |---------|----------------|---------------------------|
-| Performance Tiers | Daily | Flag Critical/Poor ads for Claudio to review |
+| Performance Tiers | Daily | Flag Critical/Poor ads for Max to review |
 | Anomalies | Daily | Investigate cause, report if >20% swing |
 | Data Quality | Weekly | Report breaches to team for UTM check |
 | Mismatches | Weekly | Note which ads have disconnects |
-| Budget Recs | Daily | Send kill/scale list to Claudio for approval |
+| Budget Recs | Daily | Send kill/scale list to Max for approval |
 | Freshness | Every visit | If Stale, don't make decisions — wait for sync |

@@ -68,6 +68,8 @@ export interface SessionRow {
   city: string;
   region: string;
   country: string;
+  chat_type: string | null;
+  chatter_name: string | null;
   sync_batch_id: string;
   join_status: 'joinable' | 'unjoinable';
   join_issue: string | null;
@@ -173,6 +175,8 @@ export function transformSession(
     city: session.city,
     region: session.region,
     country: session.country,
+    chat_type: session.chat_type ?? null,
+    chatter_name: session.chatter_name ?? null,
     sync_batch_id: syncBatchId,
     join_status: classification.status,
     join_issue: classification.issue,

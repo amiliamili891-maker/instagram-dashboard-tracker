@@ -1,12 +1,10 @@
 /**
  * POST /api/sync — Manual combined sync trigger (admin-only)
- * GET  /api/sync — Vercel Cron handler (4x daily)
  *
  * Triggers a combined Meta + Ghstly sync, materializes combined stats,
  * then runs the intelligence pass (anomalies, tiers, mismatches, budget).
  */
 
-import { timingSafeEqual } from 'crypto';
 import { materializeCombinedStats } from '@/lib/sync/combine';
 import { getServerEnv } from '@/lib/env';
 import { isAdminEmail } from '@/lib/auth/admin';
@@ -107,43 +105,6 @@ async function runPostSyncPipeline(serviceClient: any, backfillDays: number) {
   } catch (err) {
     // Intelligence failures must never fail the sync response
     console.error('[intelligence] Pass failed entirely:', err);
-  }
-}
-
-/**
- * GET /api/sync — Vercel Cron handler (4x daily)
- * Authenticated via CRON_SECRET bearer token.
- */
-export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret) {
-    console.error('CRON_SECRET not configured');
-    return Response.json({ error: 'Server misconfiguration' }, { status: 500 });
-  }
-
-  const expected = Buffer.from(`Bearer ${cronSecret}`);
-  const received = Buffer.from(authHeader ?? '');
-  if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const env = getServerEnv();
-  const { persistence, metaSyncFn, ghstlySyncFn, serviceClient } = buildSyncDeps(env, 'incremental', 0);
-
-  try {
-    const result = await runCombinedSync('incremental', persistence, metaSyncFn, ghstlySyncFn, {
-      triggeredBy: 'vercel-cron',
-    });
-
-    await runPostSyncPipeline(serviceClient, 2);
-
-    const status = result.metaSuccess && result.ghstlySuccess ? 200 : 207;
-    return Response.json(result, { status });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return Response.json({ error: message }, { status: 500 });
   }
 }
 

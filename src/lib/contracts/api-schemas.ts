@@ -84,6 +84,8 @@ export const GhstlySessionSchema = z.object({
   lead_name: z.string().nullable().optional(),
   photos_sent: z.number().optional(),
   voice_messages_sent: z.number().optional(),
+  chat_type: z.string().optional(),
+  chatter_name: z.string().nullable().optional(),
   ip_address: z.string().optional(),
   user_agent: z.string().optional(),
 });
