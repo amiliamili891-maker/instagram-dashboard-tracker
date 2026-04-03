@@ -1,5 +1,5 @@
 /**
- * GET /api/cron/comment-guard — Vercel Cron (every 5 minutes)
+ * GET /api/cron/comment-guard — Vercel Cron (hourly at :07)
  *
  * Triggers the Meta Comment Guard GitHub Actions workflow via workflow_dispatch.
  * Vercel cron is reliable; GitHub Actions schedule is not.
